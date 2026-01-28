@@ -148,12 +148,25 @@ export class ToolCallHandler {
     const results: ToolResult[] = [];
 
     for (const toolCall of toolCalls) {
-      const result = await this.executeToolCall(
-        toolCall,
-        spreadsheetId,
-        conversation
-      );
-      results.push(result);
+      const writeOperations = ['write_range', 'append_row', 'clear_range'];
+      const requiresConfirmation = writeOperations.includes(toolCall.name);
+      if (requiresConfirmation) {
+        conversation.addPendingToolCall(toolCall);
+        results.push({
+          toolUseId: toolCall.id,
+          content: JSON.stringify({
+            pending: true,
+            operation: toolCall.name,
+            range: toolCall.input.range,
+            values: toolCall.input.values,
+          }),
+          isError: false,
+          requiresConfirmation: true,
+        });
+      } else {
+        const result = await this.executeToolCall(toolCall, spreadsheetId);
+        results.push(result);
+      }
     }
 
     return results;
@@ -161,12 +174,8 @@ export class ToolCallHandler {
 
   async executeToolCall(
     toolCall: ToolCall,
-    spreadsheetId: string,
-    conversation: Conversation
+    spreadsheetId: string
   ): Promise<ToolResult> {
-    const writeOperations = ['write_range', 'append_row', 'clear_range'];
-    const requiresConfirmation = writeOperations.includes(toolCall.name);
-
     try {
       let result: any;
 
@@ -187,143 +196,6 @@ export class ToolCallHandler {
             requiresConfirmation: false,
           };
 
-        case 'write_range':
-          if (requiresConfirmation) {
-            // Store pending tool call for confirmation
-            conversation.addPendingToolCall(toolCall);
-            return {
-              toolUseId: toolCall.id,
-              content: JSON.stringify({
-                pending: true,
-                operation: 'write_range',
-                range: toolCall.input.range,
-                values: toolCall.input.values,
-              }),
-              isError: false,
-              requiresConfirmation: true,
-            };
-          }
-          result = await this.sheetsService.writeRange(
-            spreadsheetId,
-            toolCall.input.range,
-            toolCall.input.values,
-            toolCall.input.valueInputOption || 'USER_ENTERED'
-          );
-          return {
-            toolUseId: toolCall.id,
-            content: JSON.stringify({
-              success: true,
-              updatedCells: result.updatedCells,
-              updatedRows: result.updatedRows,
-              updatedRange: result.updatedRange,
-            }),
-            isError: false,
-            requiresConfirmation: false,
-          };
-
-        case 'append_row':
-          if (requiresConfirmation) {
-            conversation.addPendingToolCall(toolCall);
-            return {
-              toolUseId: toolCall.id,
-              content: JSON.stringify({
-                pending: true,
-                operation: 'append_row',
-                range: toolCall.input.range,
-                values: toolCall.input.values,
-              }),
-              isError: false,
-              requiresConfirmation: true,
-            };
-          }
-          result = await this.sheetsService.appendRow(
-            spreadsheetId,
-            toolCall.input.range,
-            toolCall.input.values,
-            toolCall.input.valueInputOption || 'USER_ENTERED'
-          );
-          return {
-            toolUseId: toolCall.id,
-            content: JSON.stringify({
-              success: true,
-              updatedCells: result.updatedCells,
-              updatedRows: result.updatedRows,
-              updatedRange: result.updatedRange,
-            }),
-            isError: false,
-            requiresConfirmation: false,
-          };
-
-        case 'clear_range':
-          if (requiresConfirmation) {
-            conversation.addPendingToolCall(toolCall);
-            return {
-              toolUseId: toolCall.id,
-              content: JSON.stringify({
-                pending: true,
-                operation: 'clear_range',
-                range: toolCall.input.range,
-              }),
-              isError: false,
-              requiresConfirmation: true,
-            };
-          }
-          result = await this.sheetsService.clearRange(
-            spreadsheetId,
-            toolCall.input.range
-          );
-          return {
-            toolUseId: toolCall.id,
-            content: JSON.stringify({
-              success: true,
-              clearedRange: result.clearedRange,
-            }),
-            isError: false,
-            requiresConfirmation: false,
-          };
-
-        case 'get_spreadsheet_metadata':
-          result = await this.sheetsService.getSpreadsheetMetadata(spreadsheetId);
-          return {
-            toolUseId: toolCall.id,
-            content: JSON.stringify({
-              success: true,
-              ...result,
-            }),
-            isError: false,
-            requiresConfirmation: false,
-          };
-
-        default:
-          return {
-            toolUseId: toolCall.id,
-            content: JSON.stringify({
-              error: `Unknown tool: ${toolCall.name}`,
-            }),
-            isError: true,
-            requiresConfirmation: false,
-          };
-      }
-    } catch (error: any) {
-      return {
-        toolUseId: toolCall.id,
-        content: JSON.stringify({
-          error: error.message || 'Tool execution failed',
-        }),
-        isError: true,
-        requiresConfirmation: false,
-      };
-    }
-  }
-
-  async executeToolCallWithoutConfirmation(
-    toolCall: ToolCall,
-    spreadsheetId: string
-  ): Promise<ToolResult> {
-    try {
-      let result: any;
-
-      switch (toolCall.name) {
         case 'write_range':
           result = await this.sheetsService.writeRange(
             spreadsheetId,

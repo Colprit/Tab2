@@ -215,7 +215,7 @@ export class ChatService {
       const toolResults = [];
       for (const toolCall of pendingCalls) {
         // Execute without requiring confirmation
-        const result = await this.toolCallHandler.executeToolCallWithoutConfirmation(
+        const result = await this.toolCallHandler.executeToolCall(
           toolCall,
           conversation.spreadsheetId
         );
