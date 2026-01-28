@@ -1,0 +1,15 @@
+{
+  "name": "google-sheets-ai-assistant",
+  "version": "1.0.0",
+  "description": "AI Assistant Sidebar for Google Sheets",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "build": "cd frontend && npm run build && cd ../backend && npm run build",
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
