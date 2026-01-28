@@ -84,32 +84,20 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
         throw new Error(data.error);
       }
 
+      setConversationId(data.conversationId);
       if (data.type === 'confirmation_required') {
-        const convId = data.conversationId || conversationId || 'default';
-        setConversationId(convId);
         setPendingConfirmation({
           toolCalls: data.pendingToolCalls,
-          conversationId: convId,
+          conversationId: data.conversationId,
         });
-        
-        // Add assistant message explaining what needs confirmation
+      }
+      if (data.type === 'confirmation_required' || data.type === 'message') {
         const assistantMessage: Message = {
           role: 'assistant',
           content: formatAssistantContent(data.message),
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, assistantMessage]);
-      } else if (data.type === 'message') {
-        const assistantMessage: Message = {
-          role: 'assistant',
-          content: formatAssistantContent(data.message),
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
-        
-        if (data.conversationId) {
-          setConversationId(data.conversationId);
-        }
       } else {
         // Unexpected response format
         console.error('Unexpected response format:', data);

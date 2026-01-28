@@ -1,5 +1,5 @@
-import { SheetsService } from './sheetsService.js';
-import { Conversation } from './conversationManager.js';
+import { SheetsService } from './sheetsService';
+import { Conversation } from './conversationManager';
 
 interface ToolCall {
   id: string;
@@ -27,10 +27,10 @@ export class ToolCallHandler {
         name: 'read_range',
         description: 'Read values from a specific range in the Google Sheet. Use A1 notation (e.g., "A1:C10" or "Sheet1!A1:C10").',
         input_schema: {
-          type: 'object',
+          type: 'object' as const,
           properties: {
             range: {
-              type: 'string',
+              type: 'string' as const,
               description: 'The range to read in A1 notation (e.g., "A1:C10" or "Sheet1!A1:C10")',
             },
           },
@@ -41,24 +41,28 @@ export class ToolCallHandler {
         name: 'write_range',
         description: 'Write values to a specific range in the Google Sheet. This operation requires user confirmation before execution.',
         input_schema: {
-          type: 'object',
+          type: 'object' as const,
           properties: {
             range: {
-              type: 'string',
+              type: 'string' as const,
               description: 'The range to write to in A1 notation (e.g., "A1:C3" or "Sheet1!A1:C3")',
             },
             values: {
-              type: 'array',
+              type: 'array' as const,
+              description: 'A 2D array of values to write. Each inner array represents a row. Values can be strings, numbers, or booleans.',
               items: {
-                type: 'array',
+                type: 'array' as const,
                 items: {
-                  type: ['string', 'number', 'boolean'],
+                  anyOf: [
+                    { type: 'string' as const },
+                    { type: 'number' as const },
+                    { type: 'boolean' as const },
+                  ],
                 },
               },
-              description: 'A 2D array of values to write. Each inner array represents a row.',
             },
             valueInputOption: {
-              type: 'string',
+              type: 'string' as const,
               enum: ['RAW', 'USER_ENTERED'],
               description: 'How to interpret the input values. RAW: values are stored as-is. USER_ENTERED: values are parsed as if typed into the sheet.',
               default: 'USER_ENTERED',
@@ -71,21 +75,25 @@ export class ToolCallHandler {
         name: 'append_row',
         description: 'Append a new row to the end of a range in the Google Sheet. This operation requires user confirmation before execution.',
         input_schema: {
-          type: 'object',
+          type: 'object' as const,
           properties: {
             range: {
-              type: 'string',
+              type: 'string' as const,
               description: 'The range to append to (e.g., "A:C" or "Sheet1!A:C")',
             },
             values: {
-              type: 'array',
+              type: 'array' as const,
+              description: 'An array of values for the new row. Values can be strings, numbers, or booleans.',
               items: {
-                type: ['string', 'number', 'boolean'],
+                anyOf: [
+                  { type: 'string' as const },
+                  { type: 'number' as const },
+                  { type: 'boolean' as const },
+                ],
               },
-              description: 'An array of values for the new row',
             },
             valueInputOption: {
-              type: 'string',
+              type: 'string' as const,
               enum: ['RAW', 'USER_ENTERED'],
               description: 'How to interpret the input values',
               default: 'USER_ENTERED',
@@ -98,10 +106,10 @@ export class ToolCallHandler {
         name: 'clear_range',
         description: 'Clear all values from a specific range in the Google Sheet. This operation requires user confirmation before execution.',
         input_schema: {
-          type: 'object',
+          type: 'object' as const,
           properties: {
             range: {
-              type: 'string',
+              type: 'string' as const,
               description: 'The range to clear in A1 notation',
             },
           },
@@ -112,7 +120,7 @@ export class ToolCallHandler {
         name: 'get_spreadsheet_metadata',
         description: 'Get metadata about the spreadsheet including sheet names and properties.',
         input_schema: {
-          type: 'object',
+          type: 'object' as const,
           properties: {},
           required: [],
         },

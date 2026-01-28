@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { SheetsService } from './sheetsService.js';
-import { ToolCallHandler } from './toolCallHandler.js';
-import { ConversationManager } from './conversationManager.js';
+import { SheetsService } from './sheetsService';
+import { ToolCallHandler } from './toolCallHandler';
+import { ConversationManager } from './conversationManager';
 
 export class ChatService {
   private anthropic: Anthropic;
@@ -56,7 +56,9 @@ export class ChatService {
     });
 
     // Get conversation history with compaction if needed
-    const messages = conversation.getMessagesForAPI();
+    // TODO: Implement compaction
+    // const messages = conversation.getMessagesForAPI();
+    const messages = conversation.getAllMessages();
 
     // Tool definitions
     const tools = this.toolCallHandler.getToolDefinitions();
