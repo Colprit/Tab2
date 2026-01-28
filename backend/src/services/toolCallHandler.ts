@@ -128,48 +128,32 @@ export class ToolCallHandler {
     ];
   }
 
-  async handleToolCalls(
-    content: any[],
+  async handleToolCall(
+    toolCall: ToolCall,
     spreadsheetId: string,
     conversation: Conversation
-  ): Promise<ToolResult[]> {
-    const toolCalls: ToolCall[] = [];
-
-    for (const item of content) {
-      if (item.type === 'tool_use') {
-        toolCalls.push({
-          id: item.id,
-          name: item.name,
-          input: item.input,
-        });
-      }
+  ): Promise<ToolResult> {
+    const writeOperations = ['write_range', 'append_row', 'clear_range'];
+    const requiresConfirmation = writeOperations.includes(toolCall.name);
+    
+    if (requiresConfirmation) {
+      // Write operation - require confirmation
+      conversation.addPendingToolCall(toolCall);
+      return {
+        toolUseId: toolCall.id,
+        content: JSON.stringify({
+          pending: true,
+          operation: toolCall.name,
+          range: toolCall.input.range,
+          values: toolCall.input.values,
+        }),
+        isError: false,
+        requiresConfirmation: true,
+      };
+    } else {
+      // Read operations can proceed immediately
+      return await this.executeToolCall(toolCall, spreadsheetId);
     }
-
-    const results: ToolResult[] = [];
-
-    for (const toolCall of toolCalls) {
-      const writeOperations = ['write_range', 'append_row', 'clear_range'];
-      const requiresConfirmation = writeOperations.includes(toolCall.name);
-      if (requiresConfirmation) {
-        conversation.addPendingToolCall(toolCall);
-        results.push({
-          toolUseId: toolCall.id,
-          content: JSON.stringify({
-            pending: true,
-            operation: toolCall.name,
-            range: toolCall.input.range,
-            values: toolCall.input.values,
-          }),
-          isError: false,
-          requiresConfirmation: true,
-        });
-      } else {
-        const result = await this.executeToolCall(toolCall, spreadsheetId);
-        results.push(result);
-      }
-    }
-
-    return results;
   }
 
   async executeToolCall(

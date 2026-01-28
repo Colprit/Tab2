@@ -29,7 +29,7 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [pendingConfirmation, setPendingConfirmation] = useState<{
-    toolCalls: PendingToolCall[];
+    toolCall: PendingToolCall;
     conversationId: string;
   } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -87,11 +87,11 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
       setConversationId(data.conversationId);
       if (data.type === 'confirmation_required') {
         setPendingConfirmation({
-          toolCalls: data.pendingToolCalls,
+          toolCall: data.pendingToolCall,
           conversationId: data.conversationId,
         });
       }
-      if (data.type === 'confirmation_required' || data.type === 'message') {
+      if (data.message) {
         const assistantMessage: Message = {
           role: 'assistant',
           content: formatAssistantContent(data.message),
@@ -100,11 +100,11 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
         setMessages((prev) => [...prev, assistantMessage]);
       } else {
         // Unexpected response format
-        console.error('Unexpected response format:', data);
-        throw new Error('Unexpected response from server');
+        console.error('Unexpected response format missing message:', data);
+        throw new Error('Unexpected response from server missing message');
       }
     } catch (error: any) {
-      console.error('Chat error:', error);
+      console.error('Chat error sending message:', error);
       const errorMessage: Message = {
         role: 'assistant',
         content: `Error: ${error.message || 'Failed to send message. Please check the browser console for details.'}`,
@@ -148,7 +148,7 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
         },
         body: JSON.stringify({
           conversationId: pendingConfirmation.conversationId,
-          toolCallIds: pendingConfirmation.toolCalls.map((tc) => tc.id),
+          toolCallId: pendingConfirmation.toolCall.id,
           confirmed,
         }),
       });
@@ -275,7 +275,7 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
 
       {pendingConfirmation && (
         <ConfirmationDialog
-          toolCalls={pendingConfirmation.toolCalls}
+          toolCall={pendingConfirmation.toolCall}
           onConfirm={(confirmed) => handleConfirm(confirmed)}
         />
       )}

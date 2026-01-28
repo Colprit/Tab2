@@ -28,6 +28,14 @@ export class Conversation {
     this.pendingToolCalls.set(toolCall.id, toolCall);
   }
 
+  getPendingToolCall(toolCallId: string): any | undefined {
+    return this.pendingToolCalls.get(toolCallId);
+  }
+
+  clearPendingToolCall(toolCallId: string) {
+    this.pendingToolCalls.delete(toolCallId);
+  }
+
   getPendingToolCalls(toolCallIds: string[]): any[] {
     return toolCallIds
       .map((id) => this.pendingToolCalls.get(id))

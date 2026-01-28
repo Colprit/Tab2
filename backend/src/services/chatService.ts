@@ -11,7 +11,7 @@ export class ChatService {
 
   constructor() {
     const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-    
+
     if (!ANTHROPIC_API_KEY) {
       console.error('Environment variables:', {
         ANTHROPIC_API_KEY: ANTHROPIC_API_KEY ? '***set***' : 'NOT SET',
@@ -24,7 +24,7 @@ export class ChatService {
         'Make sure the backend server is restarted after adding the key.'
       );
     }
-    
+
     this.anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
     this.sheetsService = SheetsService.getInstance();
     this.toolCallHandler = new ToolCallHandler(this.sheetsService);
@@ -65,7 +65,7 @@ export class ChatService {
 
     let response: any;
     let requiresConfirmation = false;
-    let pendingToolCalls: any[] = [];
+    let pendingToolCall: any = null;
 
     try {
       console.log('Making API call with messages:', messages);
@@ -92,66 +92,65 @@ export class ChatService {
       ) {
         iterationCount++;
 
-        const toolResults = await this.toolCallHandler.handleToolCalls(
-          currentResponse.content,
+        // Extract the first tool_use item from the response
+        const toolCall = currentResponse.content.find(
+          (item: any) => item.type === 'tool_use'
+        );
+
+        if (!toolCall) {
+          // No tool_use found, break out
+          break;
+        }
+
+        // Handle the single tool call
+        const toolResult = await this.toolCallHandler.handleToolCall(
+          toolCall,
           spreadsheetId,
           conversation
         );
 
-        // Check if any write operations require confirmation
-        const writeOperations = toolResults.filter(
-          (result: any) => result.requiresConfirmation
-        );
-
-        if (writeOperations.length > 0) {
-          requiresConfirmation = true;
-          // Extract tool call details from the response content
-          const toolUseItems = currentResponse.content.filter(
-            (item: any) => item.type === 'tool_use'
-          );
-          pendingToolCalls = toolUseItems
-            .filter((item: any) => 
-              writeOperations.some((op: any) => op.toolUseId === item.id)
-            )
-            .map((item: any) => ({
-              id: item.id,
-              operation: item.name,
-              range: item.input.range,
-              values: item.input.values,
-            }));
-          
-          // Store the assistant message with tool calls
+        // check is there is a pending tool call
+        const pendingToolCall = conversation.getPendingToolCall(toolCall.id);
+        if (pendingToolCall) {
+          // add the pending tool call to the conversation
           conversation.addMessage({
             role: 'assistant',
-            content: currentResponse.content,
+            content: pendingToolCall.content,
           });
           break;
         }
 
-        // Add assistant message with tool_use blocks first
+        // tool_result MUST follow immediately the tool_use block
+        // Add assistant message with tool_use block
         conversation.addMessage({
           role: 'assistant',
           content: currentResponse.content,
         });
-
-        // Add ALL tool results in a SINGLE user message
-        // All tool_result blocks must be in one message and correspond to tool_use blocks in the previous assistant message
-        const toolResultBlocks = toolResults.map((result) => ({
-          type: 'tool_result',
-          tool_use_id: result.toolUseId,
-          content: result.content,
-          is_error: result.isError,
-        }));
-
+        // Add tool_result in a user message
         conversation.addMessage({
           role: 'user',
-          content: toolResultBlocks,
+          content: [
+            // note tool_result MUST be the first item in the content array
+            {
+              type: 'tool_result',
+              tool_use_id: toolResult.toolUseId,
+              content: toolResult.content,
+              is_error: toolResult.isError,
+            },
+            {
+              type: 'text',
+              text: 'What next?',
+            },
+          ],
         });
 
         // Continue the conversation
         // TODO: Implement compaction
         // const nextMessages = conversation.getMessagesForAPI();
         const nextMessages = conversation.getAllMessages();
+
+        console.log('Inside loop, iteration:', iterationCount);
+        console.log('Making API call with messages:', nextMessages);
         currentResponse = await this.anthropic.messages.create({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 4096,
@@ -161,13 +160,14 @@ export class ChatService {
           console.error('Anthropic API error in loop:', error);
           throw new Error(`Failed to communicate with AI: ${error.message || 'Unknown error'}`);
         });
+        console.log('API Response:', currentResponse);
       }
 
       // If we broke out due to confirmation needed, return that
       if (requiresConfirmation) {
         return {
           type: 'confirmation_required',
-          pendingToolCalls,
+          pendingToolCall,
           message: currentResponse.content,
           conversationId: conversation.id,
         };
@@ -192,9 +192,9 @@ export class ChatService {
     }
   }
 
-  async confirmToolCalls(
+  async confirmToolCall(
     conversationId: string,
-    toolCallIds: string[],
+    toolCallId: string,
     confirmed: boolean
   ) {
     const conversation = this.conversationManager.getConversation(conversationId);
@@ -206,38 +206,48 @@ export class ChatService {
       // User rejected, add a message explaining
       conversation.addMessage({
         role: 'user',
-        content: 'I do not want to proceed with these changes.',
+        content: 'I do not want to proceed with this change.',
       });
     } else {
-      // Execute the pending tool calls (skip confirmation check)
-      const pendingCalls = conversation.getPendingToolCalls(toolCallIds);
-      
-      // Clear pending calls first
-      conversation.clearPendingToolCalls(toolCallIds);
-      
-      // Execute all tool calls and collect results
-      const toolResults = [];
-      for (const toolCall of pendingCalls) {
-        // Execute without requiring confirmation
-        const result = await this.toolCallHandler.executeToolCall(
-          toolCall,
-          conversation.spreadsheetId
-        );
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: toolCall.id,
-          content: result.content,
-          is_error: result.isError,
-        });
+      // Execute the pending tool call (skip confirmation check)
+      const pendingCall = conversation.getPendingToolCall(toolCallId);
+
+      if (!pendingCall) {
+        throw new Error('Pending tool call not found');
       }
 
-      // Add all tool results in a SINGLE user message
-      if (toolResults.length > 0) {
-        conversation.addMessage({
-          role: 'user',
-          content: toolResults,
-        });
-      }
+      // Clear pending call first
+      conversation.clearPendingToolCall(toolCallId);
+
+      // Execute the tool call without requiring confirmation
+      const toolResult = await this.toolCallHandler.executeToolCall(
+        pendingCall,
+        conversation.spreadsheetId
+      );
+         
+      // tool_result MUST follow immediately the tool_use block
+      // Add tool_use in a message
+      conversation.addMessage({
+        role: 'assistant',
+        content: pendingCall,
+      });
+      // Add tool_result in a user message
+      conversation.addMessage({
+        role: 'user',
+        content: [
+          // note tool_result MUST be the first item in the content array
+          {
+            type: 'tool_result',
+            tool_use_id: toolResult.toolUseId,
+            content: toolResult.content,
+            is_error: toolResult.isError,
+          },
+          {
+            type: 'text',
+            text: 'What next?',
+          },
+        ],
+      });
     }
 
     // Continue conversation
@@ -246,12 +256,15 @@ export class ChatService {
     const messages = conversation.getAllMessages();
     const tools = this.toolCallHandler.getToolDefinitions();
 
+    console.log('Inside confirmToolCall');
+    console.log('Making API call with messages:', messages);
     const response = await this.anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 4096,
       messages: messages,
       tools: tools,
     });
+    console.log('API Response:', response);
 
     conversation.addMessage({
       role: 'assistant',
