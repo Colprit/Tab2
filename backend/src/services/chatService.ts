@@ -68,6 +68,7 @@ export class ChatService {
     let pendingToolCalls: any[] = [];
 
     try {
+      console.log('Making API call with messages:', messages);
       // Initial API call
       response = await this.anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
@@ -78,6 +79,7 @@ export class ChatService {
         console.error('Anthropic API error:', error);
         throw new Error(`Failed to communicate with AI: ${error.message || 'Unknown error'}`);
       });
+      console.log('API Response:', response);
 
       // Handle tool calls in a loop
       let currentResponse = response;
@@ -147,7 +149,9 @@ export class ChatService {
         });
 
         // Continue the conversation
-        const nextMessages = conversation.getMessagesForAPI();
+        // TODO: Implement compaction
+        // const nextMessages = conversation.getMessagesForAPI();
+        const nextMessages = conversation.getAllMessages();
         currentResponse = await this.anthropic.messages.create({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 4096,
@@ -237,7 +241,9 @@ export class ChatService {
     }
 
     // Continue conversation
-    const messages = conversation.getMessagesForAPI();
+    // TODO: Implement compaction
+    // const messages = conversation.getMessagesForAPI();
+    const messages = conversation.getAllMessages();
     const tools = this.toolCallHandler.getToolDefinitions();
 
     const response = await this.anthropic.messages.create({
