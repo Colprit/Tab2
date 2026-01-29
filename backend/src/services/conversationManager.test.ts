@@ -179,7 +179,7 @@ describe('Conversation', () => {
         role: 'assistant' as const,
         content: [{
           type: 'tool_use',
-          id: 'tool-1',
+          id: 'tool-111',
           name: 'read_range',
           input: { range: 'A1:B2' },
         }],
@@ -188,7 +188,7 @@ describe('Conversation', () => {
         role: 'user' as const,
         content: [{
           type: 'tool_result',
-          tool_use_id: 'tool-1',
+          tool_use_id: 'tool-111',
           content: JSON.stringify({ success: true }),
         }],
       };
@@ -206,7 +206,7 @@ describe('Conversation', () => {
         role: 'assistant' as const,
         content: [{
           type: 'tool_use',
-          id: 'tool-1',
+          id: 'tool-22222',
           name: 'read_range',
           input: { range: 'A1:B2' },
         }],
@@ -229,7 +229,7 @@ describe('Conversation', () => {
         role: 'user' as const,
         content: [{
           type: 'tool_result',
-          tool_use_id: 'tool-1',
+          tool_use_id: 'tool-33333',
           content: JSON.stringify({ success: true }),
         }],
       };
@@ -251,7 +251,7 @@ describe('Conversation', () => {
         role: 'assistant' as const,
         content: [{
           type: 'tool_use',
-          id: 'tool-1',
+          id: 'tool-44444',
           name: 'read_range',
           input: { range: 'A1:B2' },
         }],
@@ -260,7 +260,7 @@ describe('Conversation', () => {
         role: 'user' as const,
         content: [{
           type: 'tool_result',
-          tool_use_id: 'tool-2', // Mismatched ID
+          tool_use_id: 'tool-55555', // Mismatched ID
           content: JSON.stringify({ success: true }),
         }],
       };
