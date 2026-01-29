@@ -185,8 +185,58 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
     }
   };
 
+  const handleNewConversation = () => {
+    // Generate a new conversation ID to start a fresh conversation
+    const newConversationId = crypto.randomUUID();
+    
+    // Clear frontend state and set new conversation ID
+    setMessages([]);
+    setConversationId(newConversationId);
+    setPendingConfirmation(null);
+    setInput('');
+  };
+
   return (
     <>
+      <div style={{ 
+        padding: '12px 16px', 
+        borderBottom: '1px solid #ddd',
+        backgroundColor: 'white',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}>
+        {conversationId && (
+          <div style={{
+            fontSize: '11px',
+            color: '#666',
+            fontFamily: 'monospace',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: '60%'
+          }}>
+            Conversation: {conversationId}
+          </div>
+        )}
+        {!conversationId && <div />}
+        <button
+          onClick={handleNewConversation}
+          disabled={isLoading || messages.length === 0}
+          style={{
+            padding: '6px 12px',
+            fontSize: '12px',
+            backgroundColor: messages.length === 0 ? '#f0f0f0' : '#4285f4',
+            color: messages.length === 0 ? '#999' : 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: isLoading || messages.length === 0 ? 'not-allowed' : 'pointer',
+            opacity: isLoading || messages.length === 0 ? 0.5 : 1
+          }}
+        >
+          New Conversation
+        </button>
+      </div>
       <div style={{ 
         flex: 1, 
         overflowY: 'auto', 
