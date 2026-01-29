@@ -33,6 +33,7 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
     conversationId: string;
   } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -41,6 +42,15 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Auto-grow textarea based on content
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const h = Math.min(Math.max(el.scrollHeight, 44), 200);
+    el.style.height = `${h}px`;
+  }, [input]);
 
   const sendMessage = async (messageText: string, currentConversationId?: string, skipUserMessage = false) => {
     if (!skipUserMessage) {
@@ -322,12 +332,12 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
         borderTop: '1px solid #ddd',
         backgroundColor: 'white'
       }}>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <input
-            type="text"
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+          <textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyPress={(e) => {
+            onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 handleSend();
@@ -335,13 +345,19 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
             }}
             placeholder="Ask about your spreadsheet..."
             disabled={isLoading}
+            rows={1}
             style={{
               flex: 1,
               padding: '10px',
               fontSize: '14px',
               border: '1px solid #ddd',
               borderRadius: '4px',
-              outline: 'none'
+              outline: 'none',
+              resize: 'none',
+              minHeight: '44px',
+              maxHeight: '200px',
+              fontFamily: 'inherit',
+              lineHeight: 1.4
             }}
           />
           <button
