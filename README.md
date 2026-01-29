@@ -31,15 +31,13 @@ npm run install:all
 
 2. Set up environment variables:
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and add your Anthropic API key:
+Create a `.env` file in the project root or in `backend/` with:
 
 ```
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
 ```
+
+Optional: `GOOGLE_SERVICE_ACCOUNT_JSON` (JSON string) can be set here, or you can configure the service account in the app UI.
 
 3. Start the development servers:
 
@@ -79,6 +77,7 @@ This will start **both** servers simultaneously:
 - **Tool Call Handler**: Processes tool calls (read/write operations)
 - **Conversation Manager**: Handles conversation history and context window management
 - **Sheets Service**: Google Sheets API wrapper
+- **Jest tests**: Unit tests for conversation manager and context handling
 
 ### Frontend (`/frontend`)
 
@@ -117,21 +116,24 @@ The system automatically manages context window limits by:
 Tab2/
 ├── backend/
 │   ├── src/
-│   │   ├── index.ts              # Express server entry point
-│   │   ├── routes/                # API routes
-│   │   │   ├── chat.ts           # Chat endpoints
-│   │   │   └── sheets.ts         # Sheets configuration
-│   │   └── services/              # Business logic
-│   │       ├── chatService.ts     # Chat orchestration
-│   │       ├── toolCallHandler.ts # Tool execution
-│   │       ├── conversationManager.ts # Context management
-│   │       └── sheetsService.ts   # Google Sheets API
+│   │   ├── index.ts                 # Express server entry point
+│   │   ├── routes/                  # API routes
+│   │   │   ├── chat.ts              # Chat endpoints
+│   │   │   └── sheets.ts            # Sheets configuration
+│   │   └── services/                # Business logic
+│   │       ├── chatService.ts       # Chat orchestration
+│   │       ├── toolCallHandler.ts   # Tool execution
+│   │       ├── conversationManager.ts   # Context management
+│   │       ├── conversationManager.test.ts
+│   │       └── sheetsService.ts     # Google Sheets API
+│   ├── jest.config.js
+│   ├── jest.setup.js
 │   └── package.json
 ├── frontend/
-│   ├── app/                       # Next.js app directory
-│   ├── components/                # React components
+│   ├── app/                         # Next.js app directory
+│   ├── components/                  # React components
 │   └── package.json
-└── package.json                   # Root package.json
+└── package.json                     # Root package.json
 ```
 
 ### Running in Development
@@ -146,11 +148,26 @@ npm run dev
 npm run build
 ```
 
+### Testing
+
+Backend tests use Jest. From the project root:
+
+```bash
+cd backend && npm test
+```
+
+Watch mode: `npm run test:watch`. Verbose: `npm run test:verbose`.
+
 ## Security Notes
 
 - The Google Service Account JSON is stored in memory only (not persisted)
 - All API calls are made server-side
 - Never commit your `.env` file or service account JSON to version control
+
+## Additional Documentation
+
+- **[SETUP.md](SETUP.md)** — Detailed setup and configuration
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** — Sidebar visibility and common issues
 
 ## License
 
