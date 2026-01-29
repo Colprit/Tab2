@@ -1,7 +1,6 @@
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
-import { Conversation, ConversationManager } from './conversationManager.js';
 
-// Create mock functions - use any to avoid type issues with mocks
+// Create mock functions that will be used in the mock module
 const mockMessagesCreate: any = jest.fn();
 const mockAnthropicConstructor: any = jest.fn().mockImplementation(() => ({
   messages: {
@@ -9,11 +8,14 @@ const mockAnthropicConstructor: any = jest.fn().mockImplementation(() => ({
   },
 }));
 
-// Mock the module using jest.unstable_mockModule (for ES modules)
+// Mock the module - must be called before imports that use @anthropic-ai/sdk
 jest.unstable_mockModule('@anthropic-ai/sdk', () => ({
   __esModule: true,
   default: mockAnthropicConstructor,
 }));
+
+// Import after mock setup
+import { Conversation, ConversationManager } from './conversationManager.js';
 
 describe('Conversation', () => {
   let conversation: Conversation;
