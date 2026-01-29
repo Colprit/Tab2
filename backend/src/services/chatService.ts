@@ -157,9 +157,9 @@ export class ChatService {
       
       return {
         type: 'confirmation_required',
-        pendingToolCalls,
         message: currentResponse.content,
         conversationId: conversation.id,
+        pendingToolCalls,
       };
     }
 

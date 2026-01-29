@@ -141,8 +141,8 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
     const confirmationRecord: Message = {
       role: 'system',
       content: confirmed
-        ? 'You confirmed the changes.'
-        : 'You cancelled the changes.',
+        ? 'You confirmed changes.'
+        : 'You cancelled changes.',
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, confirmationRecord]);
@@ -164,7 +164,7 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
 
       const data = await response.json();
 
-      if (data.type === 'message') {
+      if (data.message) {
         const assistantMessage: Message = {
           role: 'assistant',
           content: formatAssistantContent(data.message),
