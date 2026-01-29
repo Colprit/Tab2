@@ -11,7 +11,7 @@ interface ChatInterfaceProps {
 }
 
 interface Message {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string | any[];
   timestamp: Date;
 }
@@ -137,6 +137,15 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
 
   const handleConfirm = async (confirmed: boolean) => {
     if (!pendingConfirmation) return;
+
+    const confirmationRecord: Message = {
+      role: 'system',
+      content: confirmed
+        ? 'You confirmed the changes.'
+        : 'You cancelled the changes.',
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, confirmationRecord]);
 
     setIsLoading(true);
 
