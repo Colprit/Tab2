@@ -238,21 +238,35 @@ export class ChatService {
     const toolResultBlocks: any[] = [];
 
     for (const pendingCall of pendingCalls) {
-      // Add tool_use block
-      toolUseBlocks.push({
-        type: 'tool_use',
-        id: pendingCall.id,
-        name: pendingCall.name,
-        input: pendingCall.input,
-      });
+      conversation.addMessage({
+        role: 'assistant',
+        content: JSON.stringify({
+          pending: true,
+          operation: pendingCall.name,
+          range: pendingCall.input?.range,
+          values: pendingCall.input?.values,
+        }),
+      });  
 
       if (!confirmed) {
-        // User rejected
-        toolResultBlocks.push({
-          type: 'tool_result',
-          tool_use_id: pendingCall.id,
-          content: 'Denied by user.',
-          is_error: false,
+        conversation.addMessage({
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: pendingCall.id,
+              content: JSON.stringify({
+                denied: true,
+                operation: pendingCall.name,
+                range: pendingCall.input?.range,
+                values: pendingCall.input?.values,
+              }),
+            },
+            {
+              type: 'text',
+              text: 'I do not want to proceed with this tool call.',
+            },
+          ],
         });
       } else {
         // Execute the tool call
@@ -260,41 +274,32 @@ export class ChatService {
           pendingCall,
           conversation.spreadsheetId
         );
-        toolResultBlocks.push({
-          type: 'tool_result',
-          tool_use_id: pendingCall.id,
-          content: toolResult.content,
-          is_error: toolResult.isError,
+        conversation.addMessage({
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: pendingCall.id,
+              content: toolResult.content,
+            },
+            {
+              type: 'text',
+              text: 'What next?',
+            }
+          ],
         });
       }
     }
 
-    // Add assistant message with all tool_use blocks
-    conversation.addMessage({
-      role: 'assistant',
-      content: toolUseBlocks,
-    });
-
-    // Add user message with all tool_result blocks
-    const userContent: any[] = [
-      ...toolResultBlocks,
-      {
-        type: 'text',
-        text: confirmed ? 'What next?' : 'I do not want to proceed with these changes.',
-      },
-    ];
-    
-    conversation.addMessage({
-      role: 'user',
-      content: userContent,
-    });
-
-    // Continue conversation
-    try {
-      return await this.continueConversation(conversation, conversation.spreadsheetId);
-    } catch (error: any) {
-      console.error('Confirmation error:', error);
-      throw new Error(`Confirmation error: ${error.message}`);
+    // If there are no pending tool calls, continue the conversation
+    if (!conversation.hasPendingToolCalls()) {
+      // Continue conversation
+      try {
+        return await this.continueConversation(conversation, conversation.spreadsheetId);
+      } catch (error: any) {
+        console.error('Confirmation error:', error);
+        throw new Error(`Confirmation error: ${error.message}`);
+      }
     }
   }
 
