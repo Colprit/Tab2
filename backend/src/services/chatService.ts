@@ -292,10 +292,6 @@ export class ChatService {
                 ? toolResult.content
                 : JSON.stringify(toolResult.content),
             },
-            {
-              type: 'text',
-              text: 'What next?',
-            }
           ],
         });
       }
@@ -306,19 +302,26 @@ export class ChatService {
     console.log("================================================");
     console.log("Has pending tool calls:", conversation.hasPendingToolCalls());
     console.log("================================================");
-    // If there are no pending tool calls, continue the conversation
-    if (!conversation.hasPendingToolCalls()) {
-      console.log("================================================");
-      console.log("No pending tool calls, continuing conversation");
-      console.log("================================================");
-      // Continue conversation
-      try {
-        return await this.continueConversation(conversation, conversation.spreadsheetId);
-      } catch (error: any) {
-        console.error('Confirmation error:', error);
-        throw new Error(`Confirmation error: ${error.message}`);
-      }
-    }
+    
+    // Return success response with information about pending calls
+    const hasMorePendingCalls = conversation.hasPendingToolCalls();
+    const allPendingCalls = hasMorePendingCalls 
+      ? conversation.getAllPendingToolCalls()
+      : [];
+    
+    const pendingToolCalls = allPendingCalls.map((toolCall: any) => ({
+      id: toolCall.id,
+      operation: toolCall.name,
+      range: toolCall.input?.range,
+      values: toolCall.input?.values,
+    }));
+    
+    return {
+      success: true,
+      conversationId: conversation.id,
+      hasMorePendingCalls,
+      pendingToolCalls: hasMorePendingCalls ? pendingToolCalls : [],
+    };
   }
 
   configureSheets(serviceAccountJson: any) {

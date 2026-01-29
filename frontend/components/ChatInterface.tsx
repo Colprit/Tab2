@@ -42,20 +42,15 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
     scrollToBottom();
   }, [messages]);
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
-
-    const messageToSend = input.trim();
-    
-    const userMessage: Message = {
-      role: 'user',
-      content: messageToSend,
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInput('');
-    setIsLoading(true);
+  const sendMessage = async (messageText: string, currentConversationId?: string, skipUserMessage = false) => {
+    if (!skipUserMessage) {
+      const userMessage: Message = {
+        role: 'user',
+        content: messageText,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, userMessage]);
+    }
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/chat/message`, {
@@ -64,8 +59,8 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: messageToSend,
-          conversationId,
+          message: messageText,
+          conversationId: currentConversationId || conversationId,
           spreadsheetId,
         }),
       });
@@ -98,13 +93,27 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, assistantMessage]);
-      } else {
-        // Unexpected response format
+      } else if (!data.type) {
+        // Unexpected response format (but confirmation_required is ok without message)
         console.error('Unexpected response format missing message:', data);
         throw new Error('Unexpected response from server missing message');
       }
     } catch (error: any) {
       console.error('Chat error sending message:', error);
+      throw error; // Re-throw so caller can handle error messages
+    }
+  };
+
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return;
+
+    const messageToSend = input.trim();
+    setInput('');
+    setIsLoading(true);
+
+    try {
+      await sendMessage(messageToSend);
+    } catch (error: any) {
       const errorMessage: Message = {
         role: 'assistant',
         content: `Error: ${error.message || 'Failed to send message. Please check the browser console for details.'}`,
@@ -161,16 +170,38 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
           confirmed,
         }),
       });
-      
-      const data = await response.json();
 
-      if (data.message && data.message.length > 0) {
-        const assistantMessage: Message = {
-          role: 'assistant',
-          content: formatAssistantContent(data.message),
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}: ${response.statusText}` }));
+        console.error('Server error response:', errorData);
+        throw new Error(errorData.error || `Server error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('Confirmation response data:', data);
+
+      if (data.error) {
+        // Backend returned an error
+        throw new Error(data.error);
+      }
+
+      // Handle new confirmation required (if there are more pending tool calls)
+      if (data.hasMorePendingCalls && data.pendingToolCalls && data.pendingToolCalls.length > 0) {
+        setPendingConfirmation({
+          toolCalls: data.pendingToolCalls,
+          conversationId: data.conversationId,
+        });
+        // Don't clear pendingConfirmation here - we just set a new one
+      } else {
+        // No new confirmation needed, clear the pending confirmation
+        setPendingConfirmation(null);
+        
+        // If confirmed and no more pending calls, continue the conversation
+        if (confirmed && !data.hasMorePendingCalls) {
+          // Continue conversation by sending "What next?" message
+          // Skip adding user message since this is an automatic continuation
+          await sendMessage('What next?', data.conversationId, true);
+        }
       }
     } catch (error: any) {
       const errorMessage: Message = {
@@ -179,9 +210,9 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
+      setPendingConfirmation(null);
     } finally {
       setIsLoading(false);
-      setPendingConfirmation(null);
     }
   };
 
