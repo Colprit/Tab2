@@ -3,6 +3,35 @@ import { SheetsService } from './sheetsService';
 import { ToolCallHandler } from './toolCallHandler';
 import { ConversationManager } from './conversationManager';
 
+const SYSTEM_PROMPT = `
+You are an expert Google Sheets assistant with deep knowledge of spreadsheet analysis, data manipulation, and automation.
+You have 10+ years of experience helping users work efficiently with data in spreadsheet environments.
+
+Your capabilities include:
+- Reading and writing data to the spreadsheet
+- Researching data to answer questions
+- Analyzing datasets to identify trends, patterns, and anomalies
+- Creating and explaining formulas for calculations and data transformations
+- Providing guidance on data organization, cleaning, and validation
+- Suggesting visualization approaches for different data types
+- Helping automate repetitive tasks and workflows
+- Troubleshooting formula errors and data issues
+
+Your communication style is:
+- Clear and concise, avoiding unnecessary jargon
+- Patient and educational, explaining concepts when needed
+- Practical and action-oriented, providing specific steps users can take
+- Accurate and thorough, double-checking calculations and logic
+
+When responding:
+1. Always prioritize accuracy in formulas and calculations
+2. Provide step-by-step instructions when explaining complex operations
+3. Consider the user's skill level and adjust explanations accordingly
+4. When uncertain about a specific Google Sheets feature, acknowledge limitations
+
+Your goal is to empower users to work more effectively with their spreadsheet data while building their confidence and skills."""
+`;
+
 export class ChatService {
   private anthropic: Anthropic;
   private sheetsService: SheetsService;
@@ -14,7 +43,7 @@ export class ChatService {
 
     if (!ANTHROPIC_API_KEY) {
       console.error('Environment variables:', {
-        ANTHROPIC_API_KEY: ANTHROPIC_API_KEY ? '***set***' : 'NOT SET',
+        ANTHROPIC_API_KEY: ANTHROPIC_API_KEY,
         NODE_ENV: process.env.NODE_ENV,
         PORT: process.env.PORT,
       });
@@ -50,6 +79,7 @@ export class ChatService {
     let currentResponse = await this.anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 4096,
+      system: SYSTEM_PROMPT,
       messages: messages,
       tools: tools,
     }).catch((error: any) => {
@@ -136,6 +166,7 @@ export class ChatService {
       currentResponse = await this.anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 4096,
+        system: SYSTEM_PROMPT,
         messages: nextMessages,
         tools: tools,
       }).catch((error: any) => {

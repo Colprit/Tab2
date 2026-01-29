@@ -26,6 +26,115 @@ describe('Conversation', () => {
     mockMessagesCreate.mockClear();
   });
 
+  describe('getMessageType and getMessageId', () => {
+    const getMessageType = (c: Conversation, message: any) =>
+      (c as any).getMessageType(message);
+    const getMessageId = (c: Conversation, message: any) =>
+      (c as any).getMessageId(message);
+
+    describe('getMessageType', () => {
+      it('returns "text" for message with text content', () => {
+        const msg = { role: 'user' as const, content: [{ type: 'text', text: 'Hi' }] };
+        expect(getMessageType(conversation, msg)).toBe('text');
+      });
+
+      it('returns "tool_use" for message with tool_use content', () => {
+        const msg = {
+          role: 'assistant' as const,
+          content: [{ type: 'tool_use', id: 't1', name: 'read_range', input: {} }],
+        };
+        expect(getMessageType(conversation, msg)).toBe('tool_use');
+      });
+
+      it('returns "tool_result" for message with tool_result content', () => {
+        const msg = {
+          role: 'user' as const,
+          content: [{ type: 'tool_result', tool_use_id: 't1', content: '{}' }],
+        };
+        expect(getMessageType(conversation, msg)).toBe('tool_result');
+      });
+
+      it('returns "unknown" when message is undefined', () => {
+        expect(getMessageType(conversation, undefined)).toBe('unknown');
+      });
+
+      it('returns "unknown" when message is null', () => {
+        expect(getMessageType(conversation, null)).toBe('unknown');
+      });
+
+      it('returns "unknown" when message.content is undefined', () => {
+        expect(getMessageType(conversation, { role: 'user' })).toBe('unknown');
+      });
+
+      it('returns "unknown" when message.content is not an array', () => {
+        expect(getMessageType(conversation, { role: 'user', content: 'hello' })).toBe('unknown');
+      });
+
+      it('returns "unknown" when message.content is empty array', () => {
+        expect(getMessageType(conversation, { role: 'user', content: [] })).toBe('unknown');
+      });
+
+      it('returns "unknown" when first content block has no type', () => {
+        expect(getMessageType(conversation, { role: 'user', content: [{}] })).toBe('unknown');
+      });
+
+      it('returns "unknown" when first content block has type null/undefined', () => {
+        expect(getMessageType(conversation, { role: 'user', content: [{ type: null }] })).toBe('unknown');
+      });
+    });
+
+    describe('getMessageId', () => {
+      it('returns id for tool_use message', () => {
+        const msg = {
+          role: 'assistant' as const,
+          content: [{ type: 'tool_use', id: 'tool-abc', name: 'read_range', input: {} }],
+        };
+        expect(getMessageId(conversation, msg)).toBe('tool-abc');
+      });
+
+      it('returns tool_use_id for tool_result message', () => {
+        const msg = {
+          role: 'user' as const,
+          content: [{ type: 'tool_result', tool_use_id: 'tool-xyz', content: '{}' }],
+        };
+        expect(getMessageId(conversation, msg)).toBe('tool-xyz');
+      });
+
+      it('returns empty string for text message', () => {
+        const msg = { role: 'user' as const, content: [{ type: 'text', text: 'Hi' }] };
+        expect(getMessageId(conversation, msg)).toBe('');
+      });
+
+      it('returns empty string when message is undefined', () => {
+        expect(getMessageId(conversation, undefined)).toBe('');
+      });
+
+      it('returns empty string when message has no content', () => {
+        expect(getMessageId(conversation, { role: 'user' })).toBe('');
+      });
+
+      it('returns empty string when message.content is empty array', () => {
+        expect(getMessageId(conversation, { role: 'user', content: [] })).toBe('');
+      });
+
+      it('returns empty string for tool_use when id is missing', () => {
+        const msg = {
+          role: 'assistant' as const,
+          content: [{ type: 'tool_use', name: 'read_range', input: {} }],
+        };
+        expect(getMessageId(conversation, msg)).toBe('');
+      });
+
+      it('returns empty string for tool_result when tool_use_id is missing', () => {
+        const msg = {
+          role: 'user' as const,
+          content: [{ type: 'tool_result', content: '{}' }],
+        };
+        expect(getMessageId(conversation, msg)).toBe('');
+      });
+    });
+  });
+
   describe('Message Management', () => {
     it('should add messages correctly', () => {
       const message = {

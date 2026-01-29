@@ -126,18 +126,19 @@ export class Conversation {
   }
 
   private getMessageType(message: Message): string {
-    if (message.content && Array.isArray(message.content)) {
-      return message.content[0].type;
+    if (!message?.content || !Array.isArray(message.content) || message.content.length === 0) {
+      return 'unknown';
     }
-    return 'unknown';
+    return message.content[0].type ?? 'unknown';
   }
 
   private getMessageId(message: Message): string {
+    if (!message?.content?.[0]) return '';
     switch (this.getMessageType(message)) {
       case 'tool_use':
-        return message.content[0].id;
+        return message.content[0].id ?? '';
       case 'tool_result':
-        return message.content[0].tool_use_id;
+        return message.content[0].tool_use_id ?? '';
       default:
         return '';
     }
