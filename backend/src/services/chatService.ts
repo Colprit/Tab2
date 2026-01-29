@@ -77,7 +77,7 @@ export class ChatService {
       for (const textItem of textItems) {
         conversation.addMessage({
           role: 'assistant',
-          content: textItem,
+          content: [textItem],
         });
       }
 
@@ -97,10 +97,7 @@ export class ChatService {
         if (!toolResult.requiresConfirmation) {
           conversation.addMessage({
             role: 'assistant',
-            content: [
-              toolUseItem,
-              // { type: 'text', text: 'XXXXXXXXXXXXXXX' },
-            ],
+            content: [toolUseItem],
           });
           conversation.addMessage({
             role: 'user',
@@ -202,7 +199,7 @@ export class ChatService {
     // Add user message
     conversation.addMessage({
       role: 'user',
-      content: message,
+      content: [{ type: 'text', text: message }],
     });
 
     try {
@@ -236,12 +233,14 @@ export class ChatService {
     for (const pendingCall of pendingCalls) {
       conversation.addMessage({
         role: 'assistant',
-        content: JSON.stringify({
-          pending: true,
-          operation: pendingCall.name,
-          range: pendingCall.input?.range,
-          values: pendingCall.input?.values,
-        }),
+        content: [
+          {
+            type: 'tool_use',
+            id: pendingCall.id,
+            name: pendingCall.name,
+            input: pendingCall.input ?? {},
+          }
+        ]
       });  
 
       if (!confirmed) {
@@ -276,7 +275,9 @@ export class ChatService {
             {
               type: 'tool_result',
               tool_use_id: pendingCall.id,
-              content: toolResult.content,
+              content: typeof toolResult.content === 'string'
+                ? toolResult.content
+                : JSON.stringify(toolResult.content),
             },
             {
               type: 'text',
