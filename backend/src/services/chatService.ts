@@ -70,59 +70,59 @@ export class ChatService {
     ) {
       iterationCount++;
 
+      // Extract all text items to add to the conversation
+      const textItems: any[] = currentResponse.content.filter(
+        (item: any) => item.type === 'text'
+      );
+      for (const textItem of textItems) {
+        conversation.addMessage({
+          role: 'assistant',
+          content: textItem,
+        });
+      }
+
       // Extract all tool_use items from the response
       const toolUseItems: any[] = currentResponse.content.filter(
         (item: any) => item.type === 'tool_use'
       );
 
-      // Process all tool calls and collect results
-      const toolResults: any[] = [];
-
       for (const toolUseItem of toolUseItems) {
         // Handle the tool call
         const toolResult = await this.toolCallHandler.handleToolCall(
-          {
-            id: toolUseItem.id,
-            name: toolUseItem.name,
-            input: toolUseItem.input,
-          },
+          toolUseItem,
           spreadsheetId,
           conversation
         );
 
-        toolResults.push(toolResult);
+        if (!toolResult.requiresConfirmation) {
+          conversation.addMessage({
+            role: 'assistant',
+            content: [
+              toolUseItem,
+              // { type: 'text', text: 'XXXXXXXXXXXXXXX' },
+            ],
+          });
+          conversation.addMessage({
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: toolUseItem.id,
+                content: JSON.stringify(toolResult.content),
+              },
+              {
+                type: 'text',
+                text: 'What next?',
+              },
+            ],
+          });
+        }
       }
 
       // If any tool call requires confirmation, break and return
       if (conversation.hasPendingToolCalls()) {
         break;
       }
-
-      // All tool calls executed successfully - add messages
-      // Add assistant message with all tool_use blocks
-      conversation.addMessage({
-        role: 'assistant',
-        content: currentResponse.content,
-      });
-
-      // Add user message with all tool_result blocks
-      const toolResultBlocks = toolResults.map((result) => ({
-        type: 'tool_result',
-        tool_use_id: result.toolUseId,
-        content: result.content,
-        is_error: result.isError,
-      }));
-
-      conversation.addMessage({
-        role: 'user',
-        content: [
-          ...toolResultBlocks,
-          {
-            type: 'text',
-            text: 'What next?',
-          },
-        ],
-      });
 
       // if there are no pending tool calls, continue the conversation
       // TODO: Implement compaction
@@ -145,7 +145,7 @@ export class ChatService {
       });
       console.log('API Response:', currentResponse);
 
-      // end of while loop
+      // while loop back to top
     }
 
     // If we broke out due to confirmation needed, return that
@@ -232,10 +232,6 @@ export class ChatService {
 
     // Clear all pending calls from conversation
     conversation.clearPendingToolCalls(toolCallIds);
-
-    // Process all tool calls
-    const toolUseBlocks: any[] = [];
-    const toolResultBlocks: any[] = [];
 
     for (const pendingCall of pendingCalls) {
       conversation.addMessage({
