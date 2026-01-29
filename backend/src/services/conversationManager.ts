@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 
 const MAX_TOKENS_PER_MESSAGE = 100000; // Approximate max tokens per message
 // const MAX_CONTEXT_TOKENS = 200000; // Claude Haiku 4.5 context window
-const MAX_CONTEXT_TOKENS = 5000; // Claude Haiku 4.5 context window
+const MAX_CONTEXT_TOKENS = 6500; // Claude Haiku 4.5 context window
 const RESERVE_TOKENS = 4096; // Reserve for response
 
 interface Message {
@@ -125,32 +125,72 @@ export class Conversation {
     return validatedMessages as Anthropic.MessageParam[];
   }
 
+  private getMessageType(message: Message): string {
+    if (message.content && Array.isArray(message.content)) {
+      return message.content[0].type;
+    }
+    return 'unknown';
+  }
+
+  private getMessageId(message: Message): string {
+    switch (this.getMessageType(message)) {
+      case 'tool_use':
+        return message.content[0].id;
+      case 'tool_result':
+        return message.content[0].tool_use_id;
+      default:
+        return '';
+    }
+  }
+
   private validateToolUsePairs(messages: Message[]): Message[] {
     const validated: Message[] = [];
+    let toolUsePairs = 0;
+    let orphanedToolUse = 0;
+    let orphanedToolResult = 0;
     
+    console.log(`[Validation] Validating ${messages.length} messages for tool_use/tool_result pairs...`);
+    console.log(`[Validation] Messages: ${JSON.stringify(messages, null, 2)}`);
+
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
-      
+      const msgType = this.getMessageType(msg);
+      const msgId = this.getMessageId(msg);
       // If this is a tool_use, it must be followed by a tool_result with matching IDs
-      if (msg.content.type === 'tool_use') {
+      if (msgType === 'tool_use') {
         const nextMsg = messages[i + 1];
-        if (nextMsg && nextMsg.content.type === 'tool_result' && msg.content.id === nextMsg.content.tool_use_id) {
+        const nextMsgType = this.getMessageType(nextMsg);
+        const nextMsgId = this.getMessageId(nextMsg);
+        if (nextMsg && nextMsgType === 'tool_result' && msgId === nextMsgId) {
           // Valid pair with matching IDs - add both
           validated.push(msg);
           validated.push(nextMsg);
+          toolUsePairs++;
           i++; // Skip next message since we already added it
+          console.log(`[Validation] Valid tool_use/tool_result pair at index ${i-1}/${i} (id: ${msg})`);
         } else {
           // Orphaned tool_use or IDs don't match - skip it
-          console.warn(`[Validation] Skipping orphaned tool_use at index ${i} (id: ${msg.content.id}). Next message: ${nextMsg ? `type=${nextMsg.content.type}, tool_use_id=${nextMsg.content.tool_use_id}` : 'none'}`);
+          orphanedToolUse++;
+          const reason = !nextMsg 
+            ? 'no next message' 
+            : nextMsgType !== 'tool_result' 
+              ? `next message is type=${nextMsgType}, not tool_result`
+              : `ID mismatch: tool_use.id=${msgId} != tool_result.tool_use_id=${nextMsgId}`;
+          console.warn(`[Validation] Skipping orphaned tool_use at index ${i} (id: ${msgId}). Reason: ${reason}`);
         }
         continue;
-      } else if (msg.content.type === 'tool_result') {
-        console.warn(`[Validation] Skipping orphaned tool_result at index ${i} (tool_use_id: ${msg.content.tool_use_id})`);
-      } else {
-        // Regular message - add it
+      } else if (msgType === 'tool_result') {
+        orphanedToolResult++;
+        console.warn(`[Validation] Skipping orphaned tool_result at index ${i} (tool_use_id: ${msgId})`);
+      } else if(msgType === 'text') {
+        // Text message - add it
         validated.push(msg);
+      } else {
+        console.warn(`[Validation] Skipping unknown message type at index ${i} (type: ${msgType})`);
       }
     }
+    
+    console.log(`[Validation] Validation complete: ${validated.length} messages kept (${toolUsePairs} tool_use pairs, ${orphanedToolUse} orphaned tool_use, ${orphanedToolResult} orphaned tool_result)`);
     
     return validated;
   }
@@ -165,30 +205,24 @@ export class Conversation {
       (sum, msg) => sum + this.estimateTokens(msg),
       0
     );
-    const totalTokensNeeded = messagesTokens + promptTokens + 4096; // Reserve for response
 
     console.log(`[Summary] Attempting to summarize ${messagesToSummarize.length} messages (${messagesTokens} tokens)`);
 
-    // If messages exceed context window, limit to what fits
-    let messagesForSummary = messagesToSummarize;
-    if (totalTokensNeeded > MAX_CONTEXT_TOKENS) {
-      console.log(`[Summary] Messages exceed context window (${totalTokensNeeded} > ${MAX_CONTEXT_TOKENS}), limiting to what fits...`);
-      // Work backwards to find messages that fit
-      let fitTokens = promptTokens + 4096; // Reserve for prompt and response
-      const fittingMessages: Message[] = [];
-      
-      for (let i = messagesToSummarize.length - 1; i >= 0; i--) {
-        const msgTokens = this.estimateTokens(messagesToSummarize[i]);
-        if (fitTokens + msgTokens < MAX_CONTEXT_TOKENS - 1000) {
-          fitTokens += msgTokens;
-          fittingMessages.unshift(messagesToSummarize[i]);
-        } else {
-          break;
-        }
+    // Fit as many messages as possible within the context window
+    let messagesForSummary: Message[] = [];
+    let messagesForSummaryTokens = promptTokens + 4096; // Reserve for prompt and response
+    
+    for (const msg of messagesToSummarize) {
+      const msgTokens = this.estimateTokens(msg);
+      if (messagesForSummaryTokens + msgTokens <= MAX_CONTEXT_TOKENS - 1000) {
+        messagesForSummaryTokens += msgTokens;
+        messagesForSummary.push(msg);
+      } else {
+        break;
       }
-      messagesForSummary = fittingMessages;
-      console.log(`[Summary] Limited to ${messagesForSummary.length} messages (${fitTokens} tokens) for summary generation`);
     }
+    // Prune any orphaned tool_use/tool_result pairs
+    messagesForSummary = this.validateToolUsePairs(messagesForSummary);
 
     // Create the compaction prompt
     const compactionPrompt = `You have been working on the task described above but have not yet completed it. Write a continuation summary that will allow you (or another instance of yourself) to resume work efficiently in a future context window where the conversation history will be replaced with this summary. Your summary should be structured, concise, and actionable. Include:
