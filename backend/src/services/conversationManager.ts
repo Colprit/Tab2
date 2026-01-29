@@ -1,7 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 
 const MAX_TOKENS_PER_MESSAGE = 100000; // Approximate max tokens per message
-const MAX_CONTEXT_TOKENS = 200000; // Claude Haiku 4.5 context window
+// const MAX_CONTEXT_TOKENS = 200000; // Claude Haiku 4.5 context window
+const MAX_CONTEXT_TOKENS = 5000; // Claude Haiku 4.5 context window
 const RESERVE_TOKENS = 4096; // Reserve for response
 
 interface Message {
@@ -56,17 +57,72 @@ export class Conversation {
     }
   }
 
-  getMessagesForAPI(): Anthropic.MessageParam[] {
-    // Estimate token usage and compact if needed
-    let messages = this.compactMessages();
+  async getMessagesForAPI(anthropic: Anthropic): Promise<Anthropic.MessageParam[]> {
+    // First, estimate total tokens for all messages
+    const totalTokens = this.estimateTotalTokens();
+    const maxAllowedTokens = MAX_CONTEXT_TOKENS - RESERVE_TOKENS;
     
+    console.log(`[Compaction] Total messages: ${this.messages.length}, Estimated tokens: ${totalTokens}, Max allowed: ${maxAllowedTokens}`);
+    
+    // If we're under the limit, no compaction needed
+    if (totalTokens <= maxAllowedTokens) {
+      console.log(`[Compaction] No compaction needed, returning all ${this.messages.length} messages`);
+      return this.messages as Anthropic.MessageParam[];
+    }
+
+    console.log(`[Compaction] Token limit exceeded, starting compaction...`);
+
+    // We need compaction - work backwards from the end
+    let estimatedTokens = 0;
+    const latestMessages: Message[] = [];
+    const messagesToCheck = [...this.messages];
+    
+    // Work backwards, adding messages until we hit the token limit
+    // validateToolUsePairs will handle keeping pairs together afterwards
+    for (let i = messagesToCheck.length - 1; i >= 0; i--) {
+      const msg = messagesToCheck[i];
+      const msgTokens = this.estimateTokens(msg);
+      
+      // Add message if we have space
+      if (estimatedTokens + msgTokens < maxAllowedTokens) {
+        estimatedTokens += msgTokens;
+        latestMessages.unshift(msg);
+      } else {
+        console.log(`[Compaction] Stopped at message ${i}, token limit reached (${estimatedTokens} + ${msgTokens} >= ${maxAllowedTokens})`);
+        break;
+      }
+    }
+
+    console.log(`[Compaction] Kept ${latestMessages.length} recent messages (${estimatedTokens} tokens)`);
+
     // Validate and fix: ensure no orphaned tool_use blocks
-    messages = this.validateToolUsePairs(messages);
-    
-    return messages.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-    }));
+    // This will remove any tool_use/tool_result pairs that got broken up
+    const validatedMessages = this.validateToolUsePairs(latestMessages);
+
+    // Determine which messages were excluded (after validation)
+    const excludedStartIndex = this.messages.length - validatedMessages.length;
+    const excludedMessages = excludedStartIndex > 0 
+      ? this.messages.slice(0, excludedStartIndex)
+      : [];
+
+    // If we excluded messages, generate a summary
+    if (excludedMessages.length > 0) {
+      console.log(`[Compaction] Generating summary for ${excludedMessages.length} excluded messages...`);
+      const summaryMessage = await this.generateSummaryMessage(excludedMessages, anthropic);
+      if (summaryMessage) {
+        const summaryTokens = this.estimateTokens(summaryMessage);
+        const finalTokens = validatedMessages.reduce((sum, msg) => sum + this.estimateTokens(msg), 0) + summaryTokens;
+        console.log(`[Compaction] Summary generated (${summaryTokens} tokens), final message count: ${validatedMessages.length + 1}, final tokens: ${finalTokens}`);
+        validatedMessages.unshift(summaryMessage);
+      } else {
+        console.warn(`[Compaction] Failed to generate summary for excluded messages`);
+      }
+    }
+
+    const finalTokenCount = validatedMessages.reduce((sum, msg) => sum + this.estimateTokens(msg), 0);
+    console.log(`[Compaction] Compaction complete: ${this.messages.length} -> ${validatedMessages.length} messages, ${totalTokens} -> ${finalTokenCount} tokens`);
+
+    return validatedMessages as Anthropic.MessageParam[];
   }
 
   private validateToolUsePairs(messages: Message[]): Message[] {
@@ -74,131 +130,147 @@ export class Conversation {
     
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
-      const hasToolUse = this.hasToolUseBlocks(msg);
       
-      if (hasToolUse) {
-        // This message has tool_use blocks - check if next message has corresponding tool_result
-        const nextMsg = i < messages.length - 1 ? messages[i + 1] : null;
-        const nextHasToolResult = nextMsg && this.hasToolResultBlocks(nextMsg);
-        
-        if (!nextHasToolResult) {
-          // Orphaned tool_use - skip this message to avoid API error
-          console.warn(`Skipping orphaned tool_use message at index ${i} - no corresponding tool_result found`);
-          continue;
+      // If this is a tool_use, it must be followed by a tool_result with matching IDs
+      if (msg.content.type === 'tool_use') {
+        const nextMsg = messages[i + 1];
+        if (nextMsg && nextMsg.content.type === 'tool_result' && msg.content.id === nextMsg.content.tool_use_id) {
+          // Valid pair with matching IDs - add both
+          validated.push(msg);
+          validated.push(nextMsg);
+          i++; // Skip next message since we already added it
+        } else {
+          // Orphaned tool_use or IDs don't match - skip it
+          console.warn(`[Validation] Skipping orphaned tool_use at index ${i} (id: ${msg.content.id}). Next message: ${nextMsg ? `type=${nextMsg.content.type}, tool_use_id=${nextMsg.content.tool_use_id}` : 'none'}`);
         }
-        
-        // Valid pair - add both and skip next iteration
-        validated.push(msg);
-        validated.push(nextMsg);
-        i++; // Skip next message since we already added it
         continue;
+      } else if (msg.content.type === 'tool_result') {
+        console.warn(`[Validation] Skipping orphaned tool_result at index ${i} (tool_use_id: ${msg.content.tool_use_id})`);
+      } else {
+        // Regular message - add it
+        validated.push(msg);
       }
-      
-      // Check if this is an orphaned tool_result (shouldn't happen if compaction works correctly)
-      if (this.hasToolResultBlocks(msg)) {
-        const prevMsg = i > 0 ? validated[validated.length - 1] : null;
-        const prevHasToolUse = prevMsg && this.hasToolUseBlocks(prevMsg);
-        
-        if (!prevHasToolUse) {
-          // Orphaned tool_result - skip it
-          console.warn(`Skipping orphaned tool_result message at index ${i} - no corresponding tool_use found`);
-          continue;
-        }
-      }
-      
-      // Regular message or valid tool_result - add it
-      validated.push(msg);
     }
     
     return validated;
   }
 
-  private compactMessages(): Message[] {
-    // Simple token estimation (rough approximation)
-    let estimatedTokens = 0;
-    const compactedMessages: Message[] = [];
+  private async generateSummaryMessage(
+    messagesToSummarize: Message[],
+    anthropic: Anthropic
+  ): Promise<Message | null> {
+    // Estimate tokens for messages to summarize and the prompt
+    const promptTokens = 500; // Rough estimate for the prompt
+    const messagesTokens = messagesToSummarize.reduce(
+      (sum, msg) => sum + this.estimateTokens(msg),
+      0
+    );
+    const totalTokensNeeded = messagesTokens + promptTokens + 4096; // Reserve for response
 
-    // Work backwards from the end to ensure tool_use/tool_result pairs stay together
-    // Start with more messages and work backwards until we hit token limit
-    const startIndex = Math.max(0, this.messages.length - 20);
-    const messagesToCheck = this.messages.slice(startIndex);
-    
-    // Work backwards, ensuring pairs stay together
-    for (let i = messagesToCheck.length - 1; i >= 0; i--) {
-      const msg = messagesToCheck[i];
-      const msgTokens = this.estimateTokens(msg);
+    console.log(`[Summary] Attempting to summarize ${messagesToSummarize.length} messages (${messagesTokens} tokens)`);
+
+    // If messages exceed context window, limit to what fits
+    let messagesForSummary = messagesToSummarize;
+    if (totalTokensNeeded > MAX_CONTEXT_TOKENS) {
+      console.log(`[Summary] Messages exceed context window (${totalTokensNeeded} > ${MAX_CONTEXT_TOKENS}), limiting to what fits...`);
+      // Work backwards to find messages that fit
+      let fitTokens = promptTokens + 4096; // Reserve for prompt and response
+      const fittingMessages: Message[] = [];
       
-      // Check if this message has tool_result blocks - if so, we MUST include previous assistant message
-      if (this.hasToolResultBlocks(msg) && i > 0) {
-        const prevMsg = messagesToCheck[i - 1];
-        if (this.hasToolUseBlocks(prevMsg)) {
-          // This is a tool_result message following a tool_use message
-          // We must include both or neither
-          const prevMsgTokens = this.estimateTokens(prevMsg);
-          const totalTokens = msgTokens + prevMsgTokens;
-          
-          if (estimatedTokens + totalTokens > MAX_CONTEXT_TOKENS - RESERVE_TOKENS) {
-            // Can't fit the pair, stop here
-            break;
-          }
-          
-          // Add both messages (prev first, then current)
-          estimatedTokens += prevMsgTokens;
-          compactedMessages.unshift(prevMsg);
-          estimatedTokens += msgTokens;
-          compactedMessages.unshift(msg);
-          i--; // Skip previous message since we already added it
-          continue;
+      for (let i = messagesToSummarize.length - 1; i >= 0; i--) {
+        const msgTokens = this.estimateTokens(messagesToSummarize[i]);
+        if (fitTokens + msgTokens < MAX_CONTEXT_TOKENS - 1000) {
+          fitTokens += msgTokens;
+          fittingMessages.unshift(messagesToSummarize[i]);
+        } else {
+          break;
         }
       }
-      
-      // Check if this message has tool_use blocks - if so, ensure next message is included
-      if (this.hasToolUseBlocks(msg) && i < messagesToCheck.length - 1) {
-        const nextMsg = messagesToCheck[i + 1];
-        if (this.hasToolResultBlocks(nextMsg)) {
-          // This is a tool_use message followed by tool_result
-          // We must include both or neither
-          const nextMsgTokens = this.estimateTokens(nextMsg);
-          const totalTokens = msgTokens + nextMsgTokens;
-          
-          if (estimatedTokens + totalTokens > MAX_CONTEXT_TOKENS - RESERVE_TOKENS) {
-            // Can't fit the pair, stop here
-            break;
-          }
-          
-          // Add both messages (current first, then next)
-          estimatedTokens += msgTokens;
-          compactedMessages.unshift(msg);
-          estimatedTokens += nextMsgTokens;
-          compactedMessages.unshift(nextMsg);
-          i--; // Skip next message since we already added it
-          continue;
-        }
-      }
-      
-      // Regular message - add if we have space
-      if (estimatedTokens + msgTokens > MAX_CONTEXT_TOKENS - RESERVE_TOKENS) {
-        break;
-      }
-      estimatedTokens += msgTokens;
-      compactedMessages.unshift(msg);
+      messagesForSummary = fittingMessages;
+      console.log(`[Summary] Limited to ${messagesForSummary.length} messages (${fitTokens} tokens) for summary generation`);
     }
 
-    // If we have room, try to add older messages (but skip tool_use/tool_result pairs)
-    if (compactedMessages.length < this.messages.length) {
-      const olderMessages = this.messages.slice(0, startIndex);
-      
-      // Add a summary of older messages if we have space
-      if (olderMessages.length > 0 && estimatedTokens < MAX_CONTEXT_TOKENS - RESERVE_TOKENS - 500) {
-        const summary: Message = {
-          role: 'user',
-          content: `[Previous conversation context: ${olderMessages.length} messages about working with the spreadsheet]`,
-        };
-        compactedMessages.unshift(summary);
-      }
-    }
+    // Create the compaction prompt
+    const compactionPrompt = `You have been working on the task described above but have not yet completed it. Write a continuation summary that will allow you (or another instance of yourself) to resume work efficiently in a future context window where the conversation history will be replaced with this summary. Your summary should be structured, concise, and actionable. Include:
 
-    return compactedMessages.length > 0 ? compactedMessages : this.messages.slice(-10);
+1. **Task Overview**
+   - The user's core request and success criteria
+   - Any clarifications or constraints they specified
+
+2. **Current State**
+   - What has been completed so far
+   - Files created, modified, or analyzed (with paths if relevant)
+   - Key outputs or artifacts produced
+
+3. **Important Discoveries**
+   - Technical constraints or requirements uncovered
+   - Decisions made and their rationale
+   - Errors encountered and how they were resolved
+   - What approaches were tried that didn't work (and why)
+
+4. **Next Steps**
+   - Specific actions needed to complete the task
+   - Any blockers or open questions to resolve
+   - Priority order if multiple steps remain
+
+5. **Context to Preserve**
+   - User preferences or style requirements
+   - Domain-specific details that aren't obvious
+   - Any promises made to the user
+
+Be concise but complete—err on the side of including information that would prevent duplicate work or repeated mistakes. Write in a way that enables immediate resumption of the task.
+
+Wrap your summary in <summary></summary> tags.`;
+
+    try {
+      console.log(`[Summary] Calling Anthropic API to generate summary...`);
+      const response = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4096,
+        messages: [
+          ...(messagesForSummary as Anthropic.MessageParam[]),
+          {
+            role: 'user',
+            content: compactionPrompt,
+          },
+        ],
+      });
+
+      // Extract the summary text from the response
+      const summaryText = response.content
+        .filter((item: any) => item.type === 'text')
+        .map((item: any) => item.text)
+        .join('\n');
+
+      if (!summaryText) {
+        console.warn(`[Summary] API response contained no text content`);
+        return null;
+      }
+
+      // If we summarized fewer messages than were excluded, note that in the summary
+      const summaryContent = messagesForSummary.length < messagesToSummarize.length
+        ? `[Note: This summary covers ${messagesForSummary.length} of ${messagesToSummarize.length} excluded messages]\n\n${summaryText}`
+        : summaryText;
+
+      const summaryTokens = this.estimateTokens({ role: 'user', content: summaryContent });
+      console.log(`[Summary] Successfully generated summary (${summaryTokens} tokens, ${summaryText.length} chars)`);
+
+      return {
+        role: 'user',
+        content: summaryContent,
+      };
+    } catch (error) {
+      console.error(`[Summary] Error generating conversation summary:`, error);
+      // Fallback to simple placeholder
+      return {
+        role: 'user',
+        content: `[Previous conversation context: ${messagesToSummarize.length} messages about working with the spreadsheet]`,
+      };
+    }
+  }
+
+  private estimateTotalTokens(): number {
+    return this.messages.reduce((total, msg) => total + this.estimateTokens(msg), 0);
   }
 
   private hasToolUseBlocks(message: Message): boolean {

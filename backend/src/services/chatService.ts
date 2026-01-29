@@ -36,9 +36,7 @@ export class ChatService {
     spreadsheetId: string
   ) {
     // Get conversation history with compaction if needed
-    // TODO: Implement compaction
-    // const messages = conversation.getMessagesForAPI();
-    const messages = conversation.getAllMessages();
+    const messages = await conversation.getMessagesForAPI(this.anthropic);
 
     // Tool definitions
     const tools = this.toolCallHandler.getToolDefinitions();
@@ -128,9 +126,7 @@ export class ChatService {
       }
 
       // if there are no pending tool calls, continue the conversation
-      // TODO: Implement compaction
-      // const nextMessages = conversation.getMessagesForAPI();
-      const nextMessages = conversation.getAllMessages();
+      const nextMessages = await conversation.getMessagesForAPI(this.anthropic);
 
       console.log("================================================");
       console.log("Making API call in loop");
