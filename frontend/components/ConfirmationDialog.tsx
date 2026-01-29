@@ -1,16 +1,16 @@
 'use client';
 
 interface ConfirmationDialogProps {
-  toolCall: {
+  toolCalls: Array<{
     id: string;
     operation: string;
     range?: string;
     values?: any;
-  };
+  }>;
   onConfirm: (confirmed: boolean) => void;
 }
 
-export function ConfirmationDialog({ toolCall, onConfirm }: ConfirmationDialogProps) {
+export function ConfirmationDialog({ toolCalls, onConfirm }: ConfirmationDialogProps) {
   return (
     <div style={{
       position: 'fixed',
@@ -40,7 +40,7 @@ export function ConfirmationDialog({ toolCall, onConfirm }: ConfirmationDialogPr
         </h3>
         
         <p style={{ marginBottom: '20px', color: '#666', fontSize: '16px' }}>
-          The AI wants to make the following changes to your spreadsheet:
+          The AI wants to make {toolCalls.length} {toolCalls.length === 1 ? 'change' : 'changes'} to your spreadsheet:
         </p>
 
         <div style={{
@@ -53,36 +53,42 @@ export function ConfirmationDialog({ toolCall, onConfirm }: ConfirmationDialogPr
           overflowY: 'auto',
           flex: 1
         }}>
-          <div>
-            <div style={{ fontWeight: 600, marginBottom: '8px', fontSize: '18px' }}>
-              {toolCall.operation === 'write_range' && 'Write to Range'}
-              {toolCall.operation === 'append_row' && 'Append Row'}
-              {toolCall.operation === 'clear_range' && 'Clear Range'}
+          {toolCalls.map((toolCall, index) => (
+            <div key={toolCall.id} style={{ 
+              marginBottom: index < toolCalls.length - 1 ? '24px' : '0', 
+              paddingBottom: index < toolCalls.length - 1 ? '24px' : '0', 
+              borderBottom: index < toolCalls.length - 1 ? '1px solid #ddd' : 'none' 
+            }}>
+              <div style={{ fontWeight: 600, marginBottom: '8px', fontSize: '18px', color: '#333' }}>
+                {index + 1}. {toolCall.operation === 'write_range' && 'Write to Range'}
+                {toolCall.operation === 'append_row' && 'Append Row'}
+                {toolCall.operation === 'clear_range' && 'Clear Range'}
+              </div>
+              {toolCall.range && (
+                <div style={{ color: '#666', fontSize: '15px', marginBottom: '8px' }}>
+                  Range: <code style={{ backgroundColor: '#fff', padding: '4px 8px', borderRadius: '4px', fontSize: '14px', fontFamily: 'monospace' }}>{toolCall.range}</code>
+                </div>
+              )}
+              {toolCall.values && (
+                <div style={{ color: '#666', fontSize: '15px', marginTop: '8px' }}>
+                  <div style={{ marginBottom: '8px' }}>Values:</div>
+                  <code style={{ 
+                    backgroundColor: '#fff', 
+                    padding: '12px', 
+                    borderRadius: '4px', 
+                    fontSize: '13px',
+                    fontFamily: 'monospace',
+                    display: 'block',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-all',
+                    overflowX: 'auto'
+                  }}>
+                    {JSON.stringify(toolCall.values, null, 2)}
+                  </code>
+                </div>
+              )}
             </div>
-            {toolCall.range && (
-              <div style={{ color: '#666', fontSize: '15px', marginBottom: '8px' }}>
-                Range: <code style={{ backgroundColor: '#fff', padding: '4px 8px', borderRadius: '4px', fontSize: '14px', fontFamily: 'monospace' }}>{toolCall.range}</code>
-              </div>
-            )}
-            {toolCall.values && (
-              <div style={{ color: '#666', fontSize: '15px', marginTop: '8px' }}>
-                <div style={{ marginBottom: '8px' }}>Values:</div>
-                <code style={{ 
-                  backgroundColor: '#fff', 
-                  padding: '12px', 
-                  borderRadius: '4px', 
-                  fontSize: '13px',
-                  fontFamily: 'monospace',
-                  display: 'block',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-all',
-                  overflowX: 'auto'
-                }}>
-                  {JSON.stringify(toolCall.values, null, 2)}
-                </code>
-              </div>
-            )}
-          </div>
+          ))}
         </div>
 
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: 'auto', paddingTop: '20px' }}>

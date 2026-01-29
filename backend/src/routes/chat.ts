@@ -45,18 +45,18 @@ router.post('/message', async (req, res) => {
 
 router.post('/confirm', async (req, res) => {
   try {
-    const { conversationId, toolCallId, confirmed } = req.body;
+    const { conversationId, toolCallIds, confirmed } = req.body;
 
-    if (!conversationId || !toolCallId || typeof confirmed !== 'boolean') {
+    if (!conversationId || !toolCallIds || !Array.isArray(toolCallIds) || typeof confirmed !== 'boolean') {
       return res.status(400).json({ 
-        error: 'conversationId, toolCallId, and confirmed are required' 
+        error: 'conversationId, toolCallIds (array), and confirmed are required' 
       });
     }
 
     const chatService = getChatService();
-    const result = await chatService.confirmToolCall(
+    const result = await chatService.confirmToolCalls(
       conversationId,
-      toolCallId,
+      toolCallIds,
       confirmed
     );
 

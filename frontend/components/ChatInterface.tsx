@@ -29,7 +29,7 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [pendingConfirmation, setPendingConfirmation] = useState<{
-    toolCall: PendingToolCall;
+    toolCalls: PendingToolCall[];
     conversationId: string;
   } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -87,7 +87,7 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
       setConversationId(data.conversationId);
       if (data.type === 'confirmation_required') {
         setPendingConfirmation({
-          toolCall: data.pendingToolCall,
+          toolCalls: data.pendingToolCalls || [],
           conversationId: data.conversationId,
         });
       }
@@ -148,7 +148,7 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
         },
         body: JSON.stringify({
           conversationId: pendingConfirmation.conversationId,
-          toolCallId: pendingConfirmation.toolCall.id,
+          toolCallIds: pendingConfirmation.toolCalls.map((tc) => tc.id),
           confirmed,
         }),
       });
@@ -275,7 +275,7 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
 
       {pendingConfirmation && (
         <ConfirmationDialog
-          toolCall={pendingConfirmation.toolCall}
+          toolCalls={pendingConfirmation.toolCalls}
           onConfirm={(confirmed) => handleConfirm(confirmed)}
         />
       )}

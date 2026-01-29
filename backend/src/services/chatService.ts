@@ -31,6 +31,156 @@ export class ChatService {
     this.conversationManager = new ConversationManager();
   }
 
+  private async continueConversation(
+    conversation: any,
+    spreadsheetId: string
+  ) {
+    // Get conversation history with compaction if needed
+    // TODO: Implement compaction
+    // const messages = conversation.getMessagesForAPI();
+    const messages = conversation.getAllMessages();
+
+    // Tool definitions
+    const tools = this.toolCallHandler.getToolDefinitions();
+
+    console.log("================================================");
+    console.log("Continuing conversation");
+    console.log("================================================");
+    console.log('Making API call with messages:', JSON.stringify(messages, null, 2));
+    // console.log('Tools:', JSON.stringify(tools, null, 2));
+    // Initial API call
+    let currentResponse = await this.anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 4096,
+      messages: messages,
+      tools: tools,
+    }).catch((error: any) => {
+      console.error('Anthropic API error:', error);
+      throw new Error(`Failed to communicate with AI: ${error.message || 'Unknown error'}`);
+    });
+    console.log('API Response:', currentResponse);
+
+    // Handle tool calls in a loop
+    let iterationCount = 0;
+    const maxIterations = 10;
+
+    while (
+      currentResponse.stop_reason === 'tool_use' &&
+      iterationCount < maxIterations
+    ) {
+      iterationCount++;
+
+      // Extract all tool_use items from the response
+      const toolUseItems: any[] = currentResponse.content.filter(
+        (item: any) => item.type === 'tool_use'
+      );
+
+      // Process all tool calls and collect results
+      const toolResults: any[] = [];
+
+      for (const toolUseItem of toolUseItems) {
+        // Handle the tool call
+        const toolResult = await this.toolCallHandler.handleToolCall(
+          {
+            id: toolUseItem.id,
+            name: toolUseItem.name,
+            input: toolUseItem.input,
+          },
+          spreadsheetId,
+          conversation
+        );
+
+        toolResults.push(toolResult);
+      }
+
+      // If any tool call requires confirmation, break and return
+      if (conversation.hasPendingToolCalls()) {
+        break;
+      }
+
+      // All tool calls executed successfully - add messages
+      // Add assistant message with all tool_use blocks
+      conversation.addMessage({
+        role: 'assistant',
+        content: currentResponse.content,
+      });
+
+      // Add user message with all tool_result blocks
+      const toolResultBlocks = toolResults.map((result) => ({
+        type: 'tool_result',
+        tool_use_id: result.toolUseId,
+        content: result.content,
+        is_error: result.isError,
+      }));
+
+      conversation.addMessage({
+        role: 'user',
+        content: [
+          ...toolResultBlocks,
+          {
+            type: 'text',
+            text: 'What next?',
+          },
+        ],
+      });
+
+      // if there are no pending tool calls, continue the conversation
+      // TODO: Implement compaction
+      // const nextMessages = conversation.getMessagesForAPI();
+      const nextMessages = conversation.getAllMessages();
+
+      console.log("================================================");
+      console.log("Making API call with messages in loop");
+      console.log("================================================");
+      console.log('Inside loop, iteration:', iterationCount);
+      console.log('Making API call with messages:', JSON.stringify(nextMessages, null, 2));
+      currentResponse = await this.anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4096,
+        messages: nextMessages,
+        tools: tools,
+      }).catch((error: any) => {
+        console.error('Anthropic API error in loop:', error);
+        throw new Error(`Failed to communicate with AI: ${error.message || 'Unknown error'}`);
+      });
+      console.log('API Response:', currentResponse);
+
+      // end of while loop
+    }
+
+    // If we broke out due to confirmation needed, return that
+    if (conversation.hasPendingToolCalls()) {
+      const allPendingCalls = conversation.getAllPendingToolCalls();
+      const pendingToolCalls = allPendingCalls.map((toolCall: any) => ({
+        id: toolCall.id,
+        operation: toolCall.name,
+        range: toolCall.input?.range,
+        values: toolCall.input?.values,
+      }));
+      
+      return {
+        type: 'confirmation_required',
+        pendingToolCalls,
+        message: currentResponse.content,
+        conversationId: conversation.id,
+      };
+    }
+
+    // Add final assistant response (if we have one)
+    if (currentResponse.content && currentResponse.content.length > 0) {
+      conversation.addMessage({
+        role: 'assistant',
+        content: currentResponse.content,
+      });
+    }
+
+    return {
+      type: 'message',
+      message: currentResponse.content || [{ type: 'text', text: 'I received your message.' }],
+      conversationId: conversation.id,
+    };
+  }
+
   async handleMessage(
     message: string,
     conversationId: string | undefined,
@@ -55,146 +205,17 @@ export class ChatService {
       content: message,
     });
 
-    // Get conversation history with compaction if needed
-    // TODO: Implement compaction
-    // const messages = conversation.getMessagesForAPI();
-    const messages = conversation.getAllMessages();
-
-    // Tool definitions
-    const tools = this.toolCallHandler.getToolDefinitions();
-
-    let response: any;
-    let requiresConfirmation = false;
-    let pendingToolCall: any = null;
-
     try {
-      console.log('Making API call with messages:', messages);
-      // Initial API call
-      response = await this.anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 4096,
-        messages: messages,
-        tools: tools,
-      }).catch((error: any) => {
-        console.error('Anthropic API error:', error);
-        throw new Error(`Failed to communicate with AI: ${error.message || 'Unknown error'}`);
-      });
-      console.log('API Response:', response);
-
-      // Handle tool calls in a loop
-      let currentResponse = response;
-      let iterationCount = 0;
-      const maxIterations = 10;
-
-      while (
-        currentResponse.stop_reason === 'tool_use' &&
-        iterationCount < maxIterations
-      ) {
-        iterationCount++;
-
-        // Extract the first tool_use item from the response
-        const toolCall = currentResponse.content.find(
-          (item: any) => item.type === 'tool_use'
-        );
-
-        if (!toolCall) {
-          // No tool_use found, break out
-          break;
-        }
-
-        // Handle the single tool call
-        const toolResult = await this.toolCallHandler.handleToolCall(
-          toolCall,
-          spreadsheetId,
-          conversation
-        );
-
-        // check is there is a pending tool call
-        const pendingToolCall = conversation.getPendingToolCall(toolCall.id);
-        if (pendingToolCall) {
-          // add the pending tool call to the conversation
-          conversation.addMessage({
-            role: 'assistant',
-            content: pendingToolCall.content,
-          });
-          break;
-        }
-
-        // tool_result MUST follow immediately the tool_use block
-        // Add assistant message with tool_use block
-        conversation.addMessage({
-          role: 'assistant',
-          content: currentResponse.content,
-        });
-        // Add tool_result in a user message
-        conversation.addMessage({
-          role: 'user',
-          content: [
-            // note tool_result MUST be the first item in the content array
-            {
-              type: 'tool_result',
-              tool_use_id: toolResult.toolUseId,
-              content: toolResult.content,
-              is_error: toolResult.isError,
-            },
-            {
-              type: 'text',
-              text: 'What next?',
-            },
-          ],
-        });
-
-        // Continue the conversation
-        // TODO: Implement compaction
-        // const nextMessages = conversation.getMessagesForAPI();
-        const nextMessages = conversation.getAllMessages();
-
-        console.log('Inside loop, iteration:', iterationCount);
-        console.log('Making API call with messages:', nextMessages);
-        currentResponse = await this.anthropic.messages.create({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 4096,
-          messages: nextMessages,
-          tools: tools,
-        }).catch((error: any) => {
-          console.error('Anthropic API error in loop:', error);
-          throw new Error(`Failed to communicate with AI: ${error.message || 'Unknown error'}`);
-        });
-        console.log('API Response:', currentResponse);
-      }
-
-      // If we broke out due to confirmation needed, return that
-      if (requiresConfirmation) {
-        return {
-          type: 'confirmation_required',
-          pendingToolCall,
-          message: currentResponse.content,
-          conversationId: conversation.id,
-        };
-      }
-
-      // Add final assistant response (if we have one)
-      if (currentResponse.content && currentResponse.content.length > 0) {
-        conversation.addMessage({
-          role: 'assistant',
-          content: currentResponse.content,
-        });
-      }
-
-      return {
-        type: 'message',
-        message: currentResponse.content || [{ type: 'text', text: 'I received your message.' }],
-        conversationId: conversation.id,
-      };
+      return await this.continueConversation(conversation, spreadsheetId);
     } catch (error: any) {
       console.error('Chat service error:', error);
       throw new Error(`Chat error: ${error.message}`);
     }
   }
 
-  async confirmToolCall(
+  async confirmToolCalls(
     conversationId: string,
-    toolCallId: string,
+    toolCallIds: string[],
     confirmed: boolean
   ) {
     const conversation = this.conversationManager.getConversation(conversationId);
@@ -202,80 +223,79 @@ export class ChatService {
       throw new Error('Conversation not found');
     }
 
-    if (!confirmed) {
-      // User rejected, add a message explaining
-      conversation.addMessage({
-        role: 'user',
-        content: 'I do not want to proceed with this change.',
-      });
-    } else {
-      // Execute the pending tool call (skip confirmation check)
-      const pendingCall = conversation.getPendingToolCall(toolCallId);
-
-      if (!pendingCall) {
-        throw new Error('Pending tool call not found');
-      }
-
-      // Clear pending call first
-      conversation.clearPendingToolCall(toolCallId);
-
-      // Execute the tool call without requiring confirmation
-      const toolResult = await this.toolCallHandler.executeToolCall(
-        pendingCall,
-        conversation.spreadsheetId
-      );
-         
-      // tool_result MUST follow immediately the tool_use block
-      // Add tool_use in a message
-      conversation.addMessage({
-        role: 'assistant',
-        content: pendingCall,
-      });
-      // Add tool_result in a user message
-      conversation.addMessage({
-        role: 'user',
-        content: [
-          // note tool_result MUST be the first item in the content array
-          {
-            type: 'tool_result',
-            tool_use_id: toolResult.toolUseId,
-            content: toolResult.content,
-            is_error: toolResult.isError,
-          },
-          {
-            type: 'text',
-            text: 'What next?',
-          },
-        ],
-      });
+    // Get all pending tool calls that were confirmed/rejected
+    const pendingCalls = conversation.getPendingToolCalls(toolCallIds);
+    
+    if (pendingCalls.length === 0) {
+      throw new Error('No pending tool calls found');
     }
 
-    // Continue conversation
-    // TODO: Implement compaction
-    // const messages = conversation.getMessagesForAPI();
-    const messages = conversation.getAllMessages();
-    const tools = this.toolCallHandler.getToolDefinitions();
+    // Clear all pending calls from conversation
+    conversation.clearPendingToolCalls(toolCallIds);
 
-    console.log('Inside confirmToolCall');
-    console.log('Making API call with messages:', messages);
-    const response = await this.anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
-      messages: messages,
-      tools: tools,
-    });
-    console.log('API Response:', response);
+    // Process all tool calls
+    const toolUseBlocks: any[] = [];
+    const toolResultBlocks: any[] = [];
 
+    for (const pendingCall of pendingCalls) {
+      // Add tool_use block
+      toolUseBlocks.push({
+        type: 'tool_use',
+        id: pendingCall.id,
+        name: pendingCall.name,
+        input: pendingCall.input,
+      });
+
+      if (!confirmed) {
+        // User rejected
+        toolResultBlocks.push({
+          type: 'tool_result',
+          tool_use_id: pendingCall.id,
+          content: 'Denied by user.',
+          is_error: false,
+        });
+      } else {
+        // Execute the tool call
+        const toolResult = await this.toolCallHandler.executeToolCall(
+          pendingCall,
+          conversation.spreadsheetId
+        );
+        toolResultBlocks.push({
+          type: 'tool_result',
+          tool_use_id: pendingCall.id,
+          content: toolResult.content,
+          is_error: toolResult.isError,
+        });
+      }
+    }
+
+    // Add assistant message with all tool_use blocks
     conversation.addMessage({
       role: 'assistant',
-      content: response.content,
+      content: toolUseBlocks,
     });
 
-    return {
-      type: 'message',
-      message: response.content,
-      conversationId: conversation.id,
-    };
+    // Add user message with all tool_result blocks
+    const userContent: any[] = [
+      ...toolResultBlocks,
+      {
+        type: 'text',
+        text: confirmed ? 'What next?' : 'I do not want to proceed with these changes.',
+      },
+    ];
+    
+    conversation.addMessage({
+      role: 'user',
+      content: userContent,
+    });
+
+    // Continue conversation
+    try {
+      return await this.continueConversation(conversation, conversation.spreadsheetId);
+    } catch (error: any) {
+      console.error('Confirmation error:', error);
+      throw new Error(`Confirmation error: ${error.message}`);
+    }
   }
 
   configureSheets(serviceAccountJson: any) {

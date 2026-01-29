@@ -116,15 +116,16 @@ export class ToolCallHandler {
           required: ['range'],
         },
       },
-      {
-        name: 'get_spreadsheet_metadata',
-        description: 'Get metadata about the spreadsheet including sheet names and properties.',
-        input_schema: {
-          type: 'object' as const,
-          properties: {},
-          required: [],
-        },
-      },
+      // TODO: Add get_spreadsheet_metadata tool
+      // {
+      //   name: 'get_spreadsheet_metadata',
+      //   description: 'Get metadata about the spreadsheet including sheet names and properties.',
+      //   input_schema: {
+      //     type: 'object' as const,
+      //     properties: {},
+      //     required: [],
+      //   },
+      // },
     ];
   }
 

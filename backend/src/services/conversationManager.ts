@@ -42,6 +42,14 @@ export class Conversation {
       .filter((call) => call !== undefined);
   }
 
+  getAllPendingToolCalls(): any[] {
+    return Array.from(this.pendingToolCalls.values());
+  }
+
+  hasPendingToolCalls(): boolean {
+    return this.pendingToolCalls.size > 0;
+  }
+
   clearPendingToolCalls(toolCallIds: string[]) {
     for (const id of toolCallIds) {
       this.pendingToolCalls.delete(id);
