@@ -161,10 +161,10 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
           confirmed,
         }),
       });
-
+      
       const data = await response.json();
 
-      if (data.message) {
+      if (data.message && data.message.length > 0) {
         const assistantMessage: Message = {
           role: 'assistant',
           content: formatAssistantContent(data.message),

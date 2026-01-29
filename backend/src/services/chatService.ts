@@ -68,6 +68,9 @@ export class ChatService {
       currentResponse.stop_reason === 'tool_use' &&
       iterationCount < maxIterations
     ) {
+      console.log("================================================");
+      console.log("Inside loop, iteration:", iterationCount);
+      console.log("================================================");
       iterationCount++;
 
       // Extract all text items to add to the conversation
@@ -118,6 +121,9 @@ export class ChatService {
 
       // If any tool call requires confirmation, break and return
       if (conversation.hasPendingToolCalls()) {
+        console.log("================================================");
+        console.log("Breaking out of loop, has pending tool calls");
+        console.log("================================================");
         break;
       }
 
@@ -127,7 +133,7 @@ export class ChatService {
       const nextMessages = conversation.getAllMessages();
 
       console.log("================================================");
-      console.log("Making API call with messages in loop");
+      console.log("Making API call in loop");
       console.log("================================================");
       console.log('Inside loop, iteration:', iterationCount);
       console.log('Making API call with messages:', JSON.stringify(nextMessages, null, 2));
