@@ -221,6 +221,13 @@ export class ChatService {
     toolCallIds: string[],
     confirmed: boolean
   ) {
+    console.log("================================================");
+    console.log("Confirming tool calls");
+    console.log("================================================");
+    console.log("Conversation ID:", conversationId);
+    console.log("Tool call IDs:", toolCallIds);
+    console.log("Confirmed:", confirmed);
+    console.log("================================================");
     const conversation = this.conversationManager.getConversation(conversationId);
     if (!conversation) {
       throw new Error('Conversation not found');
@@ -294,8 +301,16 @@ export class ChatService {
       }
     }
 
+    console.log("================================================");
+    console.log("Checking if there are pending tool calls");
+    console.log("================================================");
+    console.log("Has pending tool calls:", conversation.hasPendingToolCalls());
+    console.log("================================================");
     // If there are no pending tool calls, continue the conversation
     if (!conversation.hasPendingToolCalls()) {
+      console.log("================================================");
+      console.log("No pending tool calls, continuing conversation");
+      console.log("================================================");
       // Continue conversation
       try {
         return await this.continueConversation(conversation, conversation.spreadsheetId);
