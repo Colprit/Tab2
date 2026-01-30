@@ -92,12 +92,10 @@ export class ChatService {
     let iterationCount = 0;
     const maxIterations = 10;
 
-    while (
-      currentResponse.stop_reason === 'tool_use' &&
-      iterationCount < maxIterations
-    ) {
+    while (iterationCount < maxIterations) {
       console.log("================================================");
       console.log("Inside loop, iteration:", iterationCount);
+      console.log("Stop reason:", currentResponse.stop_reason);
       console.log("================================================");
       iterationCount++;
 
@@ -117,14 +115,16 @@ export class ChatService {
         (item: any) => item.type === 'tool_use'
       );
 
+      // Handle all tool calls in the response
       for (const toolUseItem of toolUseItems) {
-        // Handle the tool call
+        // Send call to handler
         const toolResult = await this.toolCallHandler.handleToolCall(
           toolUseItem,
           spreadsheetId,
           conversation
         );
 
+        // If tool call does not require confirmation, add to conversation immediately
         if (!toolResult.requiresConfirmation) {
           conversation.addMessage({
             role: 'assistant',
@@ -148,14 +148,41 @@ export class ChatService {
       }
 
       // If any tool call requires confirmation, break and return
-      if (conversation.hasPendingToolCalls()) {
+      if (currentResponse.stop_reason === 'tool_use' && conversation.hasPendingToolCalls()) {
         console.log("================================================");
         console.log("Breaking out of loop, has pending tool calls");
         console.log("================================================");
         break;
       }
 
-      // if there are no pending tool calls, continue the conversation
+      // If we hit the end turn, break out of the loop
+      if (currentResponse.stop_reason === 'end_turn') {
+        console.log("================================================");
+        console.log("Stop Reason: End turn, breaking out of loop");
+        console.log("================================================");
+        break;
+      }
+
+      // If we hit the max tokens limit, ask AI to continue the conversation
+      if (currentResponse.stop_reason === 'max_tokens') {
+        console.log("================================================");
+        console.log("Max tokens limit hit, asking AI to continue the conversation");
+        console.log("================================================");
+        conversation.addMessage({
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `You hit the max tokens limit.
+              Please note that all tool calls you requested have been either executed or queued.
+              Please do not request these same tool calls again. Please request new tool calls as needed.
+              Please continue your response from where you left off.`,
+            },
+          ],
+        });
+      }
+
+      // Continue the conversation
       const nextMessages = await conversation.getMessagesForAPI(this.anthropic);
 
       console.log("================================================");
