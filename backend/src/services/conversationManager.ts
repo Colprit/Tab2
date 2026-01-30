@@ -210,14 +210,17 @@ export class Conversation {
     console.log(`[Summary] Attempting to summarize ${messagesToSummarize.length} messages (${messagesTokens} tokens)`);
 
     // Fit as many messages as possible within the context window
+    // Select the newest messages (closest to what we kept) for summarization
     let messagesForSummary: Message[] = [];
     let messagesForSummaryTokens = promptTokens + 4096; // Reserve for prompt and response
     
-    for (const msg of messagesToSummarize) {
+    // Iterate backwards from the end to get the newest messages first
+    for (let i = messagesToSummarize.length - 1; i >= 0; i--) {
+      const msg = messagesToSummarize[i];
       const msgTokens = this.estimateTokens(msg);
       if (messagesForSummaryTokens + msgTokens <= MAX_CONTEXT_TOKENS - 1000) {
         messagesForSummaryTokens += msgTokens;
-        messagesForSummary.push(msg);
+        messagesForSummary.unshift(msg); // Add to beginning to maintain chronological order
       } else {
         break;
       }
