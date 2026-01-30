@@ -224,7 +224,8 @@ export class ChatService {
     }
 
     // Add final assistant response (if we have one)
-    if (currentResponse.content && currentResponse.content.length > 0) {
+    // Skip if stop_reason is 'end_turn' since we already added the content in the loop
+    if (currentResponse.stop_reason !== 'end_turn' && currentResponse.content && currentResponse.content.length > 0) {
       conversation.addMessage({
         role: 'assistant',
         content: currentResponse.content,
