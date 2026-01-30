@@ -157,11 +157,26 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
   const handleConfirm = async (confirmed: boolean) => {
     if (!pendingConfirmation) return;
 
+    // Close dialog immediately for better UX
+    const toolCallsToProcess = pendingConfirmation.toolCalls;
+    const conversationIdToUse = pendingConfirmation.conversationId;
+    setPendingConfirmation(null);
+
+    // Create informative system message
+    const operationDescriptions = toolCallsToProcess.map((tc, idx) => {
+      const operationName = tc.operation === 'write_range' ? 'Write to Range'
+        : tc.operation === 'append_row' ? 'Append Row'
+        : tc.operation === 'clear_range' ? 'Clear Range'
+        : tc.operation;
+      const rangeInfo = tc.range ? ` (${tc.range})` : '';
+      return `${idx + 1}. ${operationName}${rangeInfo}`;
+    }).join(', ');
+
     const confirmationRecord: Message = {
       role: 'system',
       content: confirmed
-        ? 'You confirmed changes.'
-        : 'You cancelled changes.',
+        ? `You confirmed ${toolCallsToProcess.length} ${toolCallsToProcess.length === 1 ? 'change' : 'changes'}: ${operationDescriptions}`
+        : `You cancelled ${toolCallsToProcess.length} ${toolCallsToProcess.length === 1 ? 'change' : 'changes'}: ${operationDescriptions}`,
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, confirmationRecord]);
@@ -175,8 +190,8 @@ export function ChatInterface({ spreadsheetId }: ChatInterfaceProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          conversationId: pendingConfirmation.conversationId,
-          toolCallIds: pendingConfirmation.toolCalls.map((tc) => tc.id),
+          conversationId: conversationIdToUse,
+          toolCallIds: toolCallsToProcess.map((tc) => tc.id),
           confirmed,
         }),
       });
