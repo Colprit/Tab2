@@ -116,6 +116,48 @@ export class ToolCallHandler {
           required: ['range'],
         },
       },
+      {
+        name: 'create_chart',
+        description: 'Create a chart in the Google Sheet from the specified data range. This operation requires user confirmation before execution. The first column should contain labels/categories, and subsequent columns contain the data series to chart.',
+        input_schema: {
+          type: 'object' as const,
+          properties: {
+            chartType: {
+              type: 'string' as const,
+              enum: ['LINE', 'COLUMN', 'BAR', 'PIE', 'AREA', 'SCATTER'],
+              description: 'The type of chart to create: LINE (line chart), COLUMN (column/bar chart), BAR (horizontal bar chart), PIE (pie chart), AREA (area chart), SCATTER (scatter plot)',
+            },
+            dataSourceRange: {
+              type: 'string' as const,
+              description: 'The data range to chart in A1 notation. Must be a single rectangular range in the format "START_CELL:END_CELL" where START_CELL and END_CELL are cell references like A1, B2, etc. Examples: "A1:C10" (columns A-C, rows 1-10), "Sheet1!A1:C10" (with sheet name). The range must be contiguous (e.g., A1:C10 is valid, but A1:B1:E10 is NOT valid). First column contains labels/categories, subsequent columns contain data series. Minimum: 2 columns (1 label column + 1 data column).',
+            },
+            title: {
+              type: 'string' as const,
+              description: 'Optional title for the chart',
+            },
+            legendPosition: {
+              type: 'string' as const,
+              enum: ['BOTTOM_LEGEND', 'LEFT_LEGEND', 'RIGHT_LEGEND', 'TOP_LEGEND', 'NO_LEGEND'],
+              description: 'Position of the legend. Default is BOTTOM_LEGEND.',
+              default: 'BOTTOM_LEGEND',
+            },
+            position: {
+              type: 'object' as const,
+              properties: {
+                rowIndex: {
+                  type: 'number' as const,
+                  description: 'Row index where to place the chart (0-based). Default is 0.',
+                },
+                columnIndex: {
+                  type: 'number' as const,
+                  description: 'Column index where to place the chart (0-based). Default is after the data range.',
+                },
+              },
+            },
+          },
+          required: ['chartType', 'dataSourceRange'],
+        },
+      },
       // TODO: Add get_spreadsheet_metadata tool
       // {
       //   name: 'get_spreadsheet_metadata',
@@ -134,7 +176,7 @@ export class ToolCallHandler {
     spreadsheetId: string,
     conversation: Conversation
   ): Promise<ToolResult> {
-    const writeOperations = ['write_range', 'append_row', 'clear_range'];
+    const writeOperations = ['write_range', 'append_row', 'clear_range', 'create_chart'];
     const requiresConfirmation = writeOperations.includes(toolCall.name);
     
     if (requiresConfirmation) {
@@ -147,6 +189,9 @@ export class ToolCallHandler {
           operation: toolCall.name,
           range: toolCall.input.range,
           values: toolCall.input.values,
+          chartType: toolCall.input.chartType,
+          dataSourceRange: toolCall.input.dataSourceRange,
+          title: toolCall.input.title,
         }),
         isError: false,
         requiresConfirmation: true,
@@ -229,6 +274,27 @@ export class ToolCallHandler {
             content: JSON.stringify({
               success: true,
               clearedRange: result.clearedRange,
+            }),
+            isError: false,
+            requiresConfirmation: false,
+          };
+
+        case 'create_chart':
+          result = await this.sheetsService.createChart(
+            spreadsheetId,
+            {
+              chartType: toolCall.input.chartType,
+              dataSourceRange: toolCall.input.dataSourceRange,
+              title: toolCall.input.title,
+              legendPosition: toolCall.input.legendPosition,
+              position: toolCall.input.position,
+            }
+          );
+          return {
+            toolUseId: toolCall.id,
+            content: JSON.stringify({
+              success: true,
+              chartId: result.chartId,
             }),
             isError: false,
             requiresConfirmation: false,

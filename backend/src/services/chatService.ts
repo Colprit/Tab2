@@ -213,6 +213,9 @@ export class ChatService {
         operation: toolCall.name,
         range: toolCall.input?.range,
         values: toolCall.input?.values,
+        chartType: toolCall.input?.chartType,
+        dataSourceRange: toolCall.input?.dataSourceRange,
+        title: toolCall.input?.title,
       }));
       
       return {
@@ -369,6 +372,9 @@ export class ChatService {
       operation: toolCall.name,
       range: toolCall.input?.range,
       values: toolCall.input?.values,
+      chartType: toolCall.input?.chartType,
+      dataSourceRange: toolCall.input?.dataSourceRange,
+      title: toolCall.input?.title,
     }));
     
     return {

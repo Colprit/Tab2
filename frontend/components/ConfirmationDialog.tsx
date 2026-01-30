@@ -6,6 +6,9 @@ interface ConfirmationDialogProps {
     operation: string;
     range?: string;
     values?: any;
+    chartType?: string;
+    dataSourceRange?: string;
+    title?: string;
   }>;
   onConfirm: (confirmed: boolean) => void;
 }
@@ -63,8 +66,28 @@ export function ConfirmationDialog({ toolCalls, onConfirm }: ConfirmationDialogP
                 {index + 1}. {toolCall.operation === 'write_range' && 'Write to Range'}
                 {toolCall.operation === 'append_row' && 'Append Row'}
                 {toolCall.operation === 'clear_range' && 'Clear Range'}
+                {toolCall.operation === 'create_chart' && 'Create Chart'}
               </div>
-              {toolCall.range && (
+              {toolCall.operation === 'create_chart' && (
+                <>
+                  {toolCall.chartType && (
+                    <div style={{ color: '#666', fontSize: '15px', marginBottom: '8px' }}>
+                      Chart Type: <code style={{ backgroundColor: '#fff', padding: '4px 8px', borderRadius: '4px', fontSize: '14px', fontFamily: 'monospace' }}>{toolCall.chartType}</code>
+                    </div>
+                  )}
+                  {toolCall.dataSourceRange && (
+                    <div style={{ color: '#666', fontSize: '15px', marginBottom: '8px' }}>
+                      Data Range: <code style={{ backgroundColor: '#fff', padding: '4px 8px', borderRadius: '4px', fontSize: '14px', fontFamily: 'monospace' }}>{toolCall.dataSourceRange}</code>
+                    </div>
+                  )}
+                  {toolCall.title && (
+                    <div style={{ color: '#666', fontSize: '15px', marginBottom: '8px' }}>
+                      Title: <code style={{ backgroundColor: '#fff', padding: '4px 8px', borderRadius: '4px', fontSize: '14px', fontFamily: 'monospace' }}>{toolCall.title}</code>
+                    </div>
+                  )}
+                </>
+              )}
+              {toolCall.range && toolCall.operation !== 'create_chart' && (
                 <div style={{ color: '#666', fontSize: '15px', marginBottom: '8px' }}>
                   Range: <code style={{ backgroundColor: '#fff', padding: '4px 8px', borderRadius: '4px', fontSize: '14px', fontFamily: 'monospace' }}>{toolCall.range}</code>
                 </div>
