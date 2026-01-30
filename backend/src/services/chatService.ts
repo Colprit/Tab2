@@ -130,13 +130,15 @@ export class ChatService {
             role: 'assistant',
             content: [toolUseItem],
           });
+          
+          // Content is now always a formatted string (no double-stringification)
           conversation.addMessage({
             role: 'user',
             content: [
               {
                 type: 'tool_result',
                 tool_use_id: toolUseItem.id,
-                content: JSON.stringify(toolResult.content),
+                content: toolResult.content,
               },
               {
                 type: 'text',
@@ -340,15 +342,14 @@ export class ChatService {
           pendingCall,
           conversation.spreadsheetId
         );
+        // Content is now always a formatted string (no double-stringification)
         conversation.addMessage({
           role: 'user',
           content: [
             {
               type: 'tool_result',
               tool_use_id: pendingCall.id,
-              content: typeof toolResult.content === 'string'
-                ? toolResult.content
-                : JSON.stringify(toolResult.content),
+              content: toolResult.content,
             },
           ],
         });

@@ -9,7 +9,7 @@ interface ToolCall {
 
 interface ToolResult {
   toolUseId: string;
-  content: string;
+  content: string; // Formatted string content for tool_result
   isError: boolean;
   requiresConfirmation?: boolean;
 }
@@ -215,13 +215,13 @@ export class ToolCallHandler {
             spreadsheetId,
             toolCall.input.range
           );
+          
+          // Format as markdown table for better readability
+          const formattedContent = this.formatReadRangeResult(result);
+          
           return {
             toolUseId: toolCall.id,
-            content: JSON.stringify({
-              success: true,
-              values: result.values,
-              range: result.range,
-            }),
+            content: formattedContent,
             isError: false,
             requiresConfirmation: false,
           };
@@ -320,5 +320,56 @@ export class ToolCallHandler {
         requiresConfirmation: false,
       };
     }
+  }
+
+  /**
+   * Formats read_range results as a readable markdown table with metadata
+   * Returns a formatted string that's easy for Claude to parse and understand
+   */
+  private formatReadRangeResult(result: { values: any[][]; range: string }): string {
+    const { values, range } = result;
+    
+    if (!values || values.length === 0) {
+      return `Range: ${range}\n\nNo data found in this range.`;
+    }
+
+    const maxCols = Math.max(...values.map(row => row.length));
+    
+    let markdown = `**Range:** ${range}\n\n`;
+    markdown += `**Data:** (${values.length} row${values.length !== 1 ? 's' : ''}, ${maxCols} column${maxCols !== 1 ? 's' : ''})\n\n`;
+    markdown += '```\n';
+    
+    // Find max width for each column for alignment
+    const colWidths: number[] = [];
+    for (let col = 0; col < maxCols; col++) {
+      let maxWidth = 0;
+      for (const row of values) {
+        const cellValue = row[col]?.toString() || '';
+        maxWidth = Math.max(maxWidth, cellValue.length);
+      }
+      colWidths.push(Math.max(maxWidth, 8)); // Minimum width of 8
+    }
+    
+    // Format all rows
+    for (let i = 0; i < values.length; i++) {
+      const row = values[i];
+      const cells: string[] = [];
+      
+      for (let col = 0; col < maxCols; col++) {
+        const cellValue = (row[col]?.toString() || '').padEnd(colWidths[col] || 8);
+        cells.push(cellValue);
+      }
+      
+      markdown += cells.join(' | ') + '\n';
+      
+      // Add separator after header row (first row)
+      if (i === 0 && values.length > 1) {
+        markdown += colWidths.map(w => '-'.repeat(w)).join('-|-') + '\n';
+      }
+    }
+    
+    markdown += '```';
+    
+    return markdown;
   }
 }
