@@ -4,7 +4,7 @@ An AI-powered sidebar assistant for Google Sheets that uses Anthropic's Claude t
 
 ## Features
 
-- 🤖 **AI-Powered**: Uses Anthropic's Claude 3.5 Sonnet for intelligent spreadsheet interactions
+- 🤖 **AI-Powered**: Uses Anthropic's Claude Opus 4.5 for intelligent spreadsheet interactions
 - 📊 **Google Sheets Integration**: Full read/write access to your Google Sheets via Google Sheets API
 - 🔄 **Tool Calling Loop**: Implements a proper tool calling system that handles multiple operations in sequence
 - ✅ **Write Confirmations**: All write operations require user confirmation before execution

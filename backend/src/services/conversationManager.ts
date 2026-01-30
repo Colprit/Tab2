@@ -1,8 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 
 const MAX_TOKENS_PER_MESSAGE = 100000; // Approximate max tokens per message
-// const MAX_CONTEXT_TOKENS = 200000; // Claude Haiku 4.5 context window
-const MAX_CONTEXT_TOKENS = 6500; // Claude Haiku 4.5 context window
+// const MAX_CONTEXT_TOKENS = 200000; // Claude Opus 4.5 context window
+const MAX_CONTEXT_TOKENS = 6500; // Claude Opus 4.5 context window
 const RESERVE_TOKENS = 4096; // Reserve for response
 
 interface Message {
@@ -263,7 +263,7 @@ Wrap your summary in <summary></summary> tags.`;
     try {
       console.log(`[Summary] Calling Anthropic API to generate summary...`);
       const response = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'claude-opus-4-5-20251101',
         max_tokens: 4096,
         messages: [
           ...(messagesForSummary as Anthropic.MessageParam[]),
