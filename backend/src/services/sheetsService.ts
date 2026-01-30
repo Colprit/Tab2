@@ -214,6 +214,19 @@ export class SheetsService {
         range = options.dataSourceRange;
       }
 
+      // Validate that the range is contiguous (no commas allowed)
+      // Commas indicate multiple ranges, which are not supported for charts
+      if (range.includes(',')) {
+        throw new Error(
+          `Invalid range format: "${options.dataSourceRange}". ` +
+          `Ranges with commas (multiple ranges) are not valid for charts. ` +
+          `The range must be a single contiguous rectangular area. ` +
+          `Examples of valid ranges: "A1:C10", "Sheet1!B2:E25". ` +
+          `Examples of invalid ranges: "B2:B25,E2:E25", "Sheet1!B2:B25,E2:E25". ` +
+          `If you need to chart non-contiguous data, use a single range that includes all columns (e.g., "B2:E25" instead of "B2:B25,E2:E25").`
+        );
+      }
+
       // Determine sheet ID
       let sheetId = options.sheetId;
       if (!sheetId) {
@@ -243,7 +256,12 @@ export class SheetsService {
       const parseRange = (rangeStr: string) => {
         const match = rangeStr.match(/([A-Z]+)(\d+):([A-Z]+)(\d+)/);
         if (!match) {
-          throw new Error(`Invalid range format: ${rangeStr}. Expected format: A1:C10`);
+          throw new Error(
+            `Invalid range format: "${rangeStr}". ` +
+            `Expected a single contiguous range in A1 notation (e.g., "A1:C10" or "Sheet1!B2:E25"). ` +
+            `The range must be a rectangular area defined by two cell references separated by a colon. ` +
+            `Multiple ranges separated by commas are not supported.`
+          );
         }
         return {
           startRow: parseInt(match[2]) - 1, // Convert to 0-based
@@ -254,10 +272,14 @@ export class SheetsService {
       };
 
       const rangeIndices = parseRange(range);
-      const numDataColumns = rangeIndices.endCol - rangeIndices.startCol - 1; // Exclude first column (domain)
+      const numSeriesColumns = rangeIndices.endCol - rangeIndices.startCol - 1; // Exclude first column (X-axis)
 
-      if (numDataColumns < 1) {
-        throw new Error('Chart requires at least one data column (domain column + at least one data column)');
+      if (numSeriesColumns < 1) {
+        throw new Error(
+          'Chart requires at least one Series column. ' +
+          'The range must include: 1 X-axis column (first column) + at least 1 Series column (subsequent columns). ' +
+          'Example: "A1:B10" where A is X-axis and B is a Series, or "A1:C10" where A is X-axis and B,C are Series.'
+        );
       }
 
       // Build the chart specification
@@ -288,8 +310,8 @@ export class SheetsService {
         },
       };
 
-      // Add series for each data column (skip first column which is domain)
-      for (let i = 0; i < numDataColumns; i++) {
+      // Add series for each data column (skip first column which is X-axis)
+      for (let i = 0; i < numSeriesColumns; i++) {
         chartSpec.basicChart.series.push({
           series: {
             sourceRange: {

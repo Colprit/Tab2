@@ -118,7 +118,7 @@ export class ToolCallHandler {
       },
       {
         name: 'create_chart',
-        description: 'Create a chart in the Google Sheet from the specified data range. This operation requires user confirmation before execution. The first column should contain labels/categories, and subsequent columns contain the data series to chart.',
+        description: 'Create a chart in the Google Sheet from the specified data range. This operation requires user confirmation before execution. The chart requires an X-axis (single column) and one or more Series (one or more columns). The first column in the range is used as the X-axis, and subsequent columns are used as Series.',
         input_schema: {
           type: 'object' as const,
           properties: {
@@ -129,7 +129,7 @@ export class ToolCallHandler {
             },
             dataSourceRange: {
               type: 'string' as const,
-              description: 'The data range to chart in A1 notation. Must be a single rectangular range in the format "START_CELL:END_CELL" where START_CELL and END_CELL are cell references like A1, B2, etc. Examples: "A1:C10" (columns A-C, rows 1-10), "Sheet1!A1:C10" (with sheet name). The range must be contiguous (e.g., A1:C10 is valid, but A1:B1:E10 is NOT valid). First column contains labels/categories, subsequent columns contain data series. Minimum: 2 columns (1 label column + 1 data column).',
+              description: 'The data range to chart in A1 notation. Must be a SINGLE CONTIGUOUS rectangular range in the format "START_CELL:END_CELL" where START_CELL and END_CELL are cell references like A1, B2, etc. Examples: "A1:C10" (columns A-C, rows 1-10), "Sheet1!A1:C10" (with sheet name). IMPORTANT: The range must be contiguous - multiple ranges separated by commas are NOT valid. For example, "A1:C10" is valid, but "A1:B10,C1:D10" or "Sheet1!B2:B25,E2:E25" are NOT valid. If you need non-contiguous data, you must use a single contiguous range that includes all the data you want. STRUCTURE: The first column in the range is the X-axis (single choice - one column for categories/labels). Subsequent columns are the Series (single or multichoice - one or more columns for data values). Minimum: 2 columns (1 X-axis column + at least 1 Series column). Example: "A1:C10" means column A is X-axis, columns B and C are Series.',
             },
             title: {
               type: 'string' as const,
