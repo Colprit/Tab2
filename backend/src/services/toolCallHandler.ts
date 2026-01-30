@@ -323,53 +323,35 @@ export class ToolCallHandler {
   }
 
   /**
-   * Formats read_range results as a readable markdown table with metadata
+   * Formats read_range results as CSV with metadata
    * Returns a formatted string that's easy for Claude to parse and understand
    */
   private formatReadRangeResult(result: { values: any[][]; range: string }): string {
     const { values, range } = result;
-    
     if (!values || values.length === 0) {
       return `Range: ${range}\n\nNo data found in this range.`;
     }
 
     const maxCols = Math.max(...values.map(row => row.length));
-    
-    let markdown = `**Range:** ${range}\n\n`;
-    markdown += `**Data:** (${values.length} row${values.length !== 1 ? 's' : ''}, ${maxCols} column${maxCols !== 1 ? 's' : ''})\n\n`;
-    markdown += '```\n';
-    
-    // Find max width for each column for alignment
-    const colWidths: number[] = [];
-    for (let col = 0; col < maxCols; col++) {
-      let maxWidth = 0;
-      for (const row of values) {
-        const cellValue = row[col]?.toString() || '';
-        maxWidth = Math.max(maxWidth, cellValue.length);
-      }
-      colWidths.push(Math.max(maxWidth, 8)); // Minimum width of 8
-    }
-    
-    // Format all rows
+    let output = `Range: ${range}\n`;
+    output += `Data: ${values.length} row${values.length !== 1 ? 's' : ''}, ${maxCols} column${maxCols !== 1 ? 's' : ''}\n\n`;
+
+    // Format as CSV
     for (let i = 0; i < values.length; i++) {
       const row = values[i];
-      const cells: string[] = [];
-      
+      const csvCells: string[] = [];
       for (let col = 0; col < maxCols; col++) {
-        const cellValue = (row[col]?.toString() || '').padEnd(colWidths[col] || 8);
-        cells.push(cellValue);
+        const cellValue = row[col]?.toString() || '';
+        // Escape CSV: wrap in quotes if contains comma, quote, or newline
+        if (cellValue.includes(',') || cellValue.includes('"') || cellValue.includes('\n')) {
+          csvCells.push(`"${cellValue.replace(/"/g, '""')}"`);
+        } else {
+          csvCells.push(cellValue);
+        }
       }
-      
-      markdown += cells.join(' | ') + '\n';
-      
-      // Add separator after header row (first row)
-      if (i === 0 && values.length > 1) {
-        markdown += colWidths.map(w => '-'.repeat(w)).join('-|-') + '\n';
-      }
+      output += csvCells.join(',') + '\n';
     }
-    
-    markdown += '```';
-    
-    return markdown;
+
+    return output.trim();
   }
 }
